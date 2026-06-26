@@ -702,6 +702,7 @@ function itemHTML(item, context) {
         </div>
         <div class="item-actions">
           <button class="action-btn" onclick="restoreItem('${item.id}')">되돌리기</button>
+          <button class="action-btn danger" onclick="deleteItem('${item.id}')">삭제</button>
         </div>
       </li>`;
   }
@@ -919,6 +920,16 @@ function restoreItem(id) {
   if (!item) return;
   item.status = item.topic ? 'topic' : 'inbox';
   item.completed_at = null;
+  saveLocal();
+  renderAll();
+  saveToServer();
+}
+
+/* 완료 섹션에서 즉시 영구 삭제 */
+function deleteItem(id) {
+  state.items = state.items.filter(i => i.id !== id);
+  if (!pendingDel.items.includes(id)) pendingDel.items.push(id);
+  savePendingDel();
   saveLocal();
   renderAll();
   saveToServer();
