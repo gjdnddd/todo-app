@@ -366,6 +366,61 @@
       color: var(--text-sub);
       font-size: 14px;
     }
+
+    /* ── 항목 메모 (토글) ── */
+    .item-note {
+      display: none;
+      margin-top: 6px;
+      font-size: 13px;
+      color: var(--text-sub);
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: var(--bg);
+      border-radius: 6px;
+      padding: 6px 8px;
+    }
+    .item-note.visible { display: block; }
+    .note-indicator { font-size: 11px; color: var(--text-sub); margin-left: 4px; }
+
+    /* ── 메모 입력 (입력 패널) ── */
+    #note-input {
+      width: 100%;
+      margin-top: 8px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 8px 14px;
+      font-size: 14px;
+      font-family: var(--font);
+      outline: none;
+      resize: none;
+      color: var(--text);
+      background: var(--bg);
+    }
+    #note-input:focus { border-color: var(--accent); }
+
+    /* ── 수정 모달 폼 ── */
+    .edit-form { padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+    .edit-form input,
+    .edit-form textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      font-size: 15px;
+      font-family: var(--font);
+      outline: none;
+    }
+    .edit-form input:focus,
+    .edit-form textarea:focus { border-color: var(--accent); }
+    .edit-form textarea { height: 90px; resize: vertical; }
+    .edit-form-actions { display: flex; gap: 8px; }
+    .edit-form-actions button {
+      flex: 1; height: 44px; border-radius: var(--radius);
+      font-size: 15px; font-weight: 600; cursor: pointer;
+    }
+    .edit-save-btn { background: var(--accent); color: #fff; border: none; }
+    .edit-cancel-btn { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
   </style>
 </head>
 <body>
@@ -388,6 +443,7 @@
     <button class="grade-btn" data-grade="C">⚪ C</button>
   </div>
 
+  <textarea id="note-input" placeholder="메모 (선택)" rows="2"></textarea>
   <button id="add-btn">추가</button>
 </div>
 
@@ -693,12 +749,16 @@ function itemHTML(item, context) {
     const doneMeta = item.completed_at
       ? `<span class="item-meta">완료 ${item.completed_at.slice(0, 10)}</span>`
       : '';
+    const doneNoteToggle = item.note ? `onclick="toggleItemNote('${item.id}')" style="cursor:pointer"` : '';
+    const doneNoteIcon   = item.note ? '<span class="note-indicator">📝</span>' : '';
+    const doneNoteHtml   = item.note ? `<div class="item-note" id="note-${item.id}">${escapeHtml(item.note)}</div>` : '';
     return `
       <li class="item item-done" id="item-${item.id}">
         ${badge}
         <div class="item-body">
-          <div class="item-text">${escapeHtml(item.text)}</div>
+          <div class="item-text" ${doneNoteToggle}>${escapeHtml(item.text)}${doneNoteIcon}</div>
           ${doneMeta}
+          ${doneNoteHtml}
         </div>
         <div class="item-actions">
           <button class="action-btn" onclick="restoreItem('${item.id}')">되돌리기</button>
@@ -719,17 +779,23 @@ function itemHTML(item, context) {
     : `<button class="action-btn" onclick="moveToTop('${item.id}')">위로</button>`;
   const moveBtn     = `<button class="action-btn" onclick="openMoveModal('${item.id}')">이동</button>`;
 
+  const noteToggle = item.note ? `onclick="toggleItemNote('${item.id}')" style="cursor:pointer"` : '';
+  const noteIcon   = item.note ? '<span class="note-indicator">📝</span>' : '';
+  const noteHtml   = item.note ? `<div class="item-note" id="note-${item.id}">${escapeHtml(item.note)}</div>` : '';
+
   return `
     <li class="item" id="item-${item.id}">
       <span class="item-check" onclick="completeItem('${item.id}')"></span>
       ${badge}
       <div class="item-body">
-        <div class="item-text">${escapeHtml(item.text)}</div>
+        <div class="item-text" ${noteToggle}>${escapeHtml(item.text)}${noteIcon}</div>
         ${dateMeta}
+        ${noteHtml}
       </div>
       <div class="item-actions">
         ${moveTopBtn}
         ${moveBtn}
+        <button class="action-btn" onclick="openEditModal('${item.id}')">수정</button>
       </div>
     </li>`;
 }
@@ -842,11 +908,13 @@ function addItem() {
 
   const now = new Date().toISOString();
   const dateVal = ui.dateOn ? document.getElementById('date-input').value : null;
+  const noteVal = document.getElementById('note-input').value.trim();
 
   /* 중요 항목이면 status = inbox 에서 시작하되 important=true 로 중요 섹션에 표시됨 */
   const newItem = {
     id: crypto.randomUUID(),
     text,
+    note: noteVal || null,
     created_at: now,
     important: ui.importantOn,
     grade: ui.importantOn ? (ui.selectedGrade || 'C') : null,  // 등급 미선택 시 C 기본
@@ -885,6 +953,7 @@ function resetInputUI() {
   document.getElementById('date-input').value = '';
   document.getElementById('grade-row').classList.remove('visible');
   document.querySelectorAll('.grade-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('note-input').value = '';
 }
 
 /* ════════════════════════════════════════
@@ -920,6 +989,51 @@ function restoreItem(id) {
   if (!item) return;
   item.status = item.topic ? 'topic' : 'inbox';
   item.completed_at = null;
+  saveLocal();
+  renderAll();
+  saveToServer();
+}
+
+/* 항목 메모 펼치기/닫기 */
+function toggleItemNote(id) {
+  const noteEl = document.getElementById(`note-${id}`);
+  if (noteEl) noteEl.classList.toggle('visible');
+}
+
+/* 수정 모달 열기 */
+function openEditModal(id) {
+  const item = state.items.find(i => i.id === id);
+  if (!item) return;
+
+  document.getElementById('modal-title').textContent = '수정';
+  document.getElementById('modal-options').innerHTML = `
+    <div class="edit-form">
+      <input type="text" id="edit-text-input" value="${escapeHtml(item.text)}" placeholder="할 일" />
+      <textarea id="edit-note-input" placeholder="메모 (선택)">${escapeHtml(item.note || '')}</textarea>
+      <div class="edit-form-actions">
+        <button class="edit-cancel-btn" onclick="closeModal()">취소</button>
+        <button class="edit-save-btn" onclick="saveEdit('${id}')">저장</button>
+      </div>
+    </div>`;
+
+  document.getElementById('modal-overlay').classList.add('visible');
+  document.getElementById('edit-text-input').focus();
+}
+
+/* 수정 저장 */
+function saveEdit(id) {
+  const item    = state.items.find(i => i.id === id);
+  const textEl  = document.getElementById('edit-text-input');
+  const noteEl  = document.getElementById('edit-note-input');
+  if (!item || !textEl) return;
+
+  const newText = textEl.value.trim();
+  if (!newText) return;
+
+  item.text = newText;
+  item.note = noteEl ? (noteEl.value.trim() || null) : item.note;
+
+  closeModal();
   saveLocal();
   renderAll();
   saveToServer();
