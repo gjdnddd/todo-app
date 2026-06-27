@@ -237,7 +237,6 @@
       gap: 3px;
       align-items: center;
       justify-content: flex-end;
-      max-width: 100px;
     }
     .action-btn {
       font-size: 11px;
@@ -846,6 +845,7 @@ function itemHTML(item, context) {
         ${moveTopBtn}
         ${moveBtn}
         <button class="action-btn" onclick="openEditModal('${item.id}')">수정</button>
+        <button class="action-btn danger" onclick="deleteItem('${item.id}')">삭제</button>
       </div>
     </li>`;
 }
