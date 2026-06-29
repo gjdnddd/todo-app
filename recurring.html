@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <title>반복 업무</title>
+  <style>
+    :root {
+      --bg:           #f5f5f5;
+      --surface:      #ffffff;
+      --border:       #e0e0e0;
+      --text:         #1a1a1a;
+      --text-sub:     #666666;
+      --accent:       #1a73e8;
+      --accent-hover: #1557b0;
+      --danger:       #d32f2f;
+      --done-bg:      #e8f5e9;
+      --radius:       10px;
+      --font:         -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding-bottom: 60px;
+    }
+
+    /* ── 상단 고정 헤더 ── */
+    #top-bar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    #header {
+      padding: 10px 12px 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    #header h1 { font-size: 17px; font-weight: 700; }
+    #sync-status {
+      font-size: 11px;
+      color: var(--text-sub);
+      padding: 0 12px 4px;
+      min-height: 16px;
+    }
+    #sync-status.error { color: var(--danger); }
+    #sync-status.ok    { color: #388e3c; }
+
+    /* ── 섹션 공통 ── */
+    .section {
+      margin: 6px 10px 0;
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .section-header:active { background: var(--bg); }
+    .section-left { display: flex; align-items: center; gap: 6px; }
+    .section-title { font-size: 15px; font-weight: 600; }
+    .section-count { font-size: 13px; color: var(--text-sub); }
+    .section-icon { font-size: 12px; color: var(--text-sub); transition: transform 0.2s; }
+    .section-icon.collapsed { transform: rotate(-90deg); }
+
+    .item-list { list-style: none; }
+    .item-list.hidden { display: none; }
+
+    .empty-msg {
+      padding: 12px;
+      font-size: 14px;
+      color: var(--text-sub);
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── 개별 항목 ── */
+    .item {
+      border-top: 1px solid var(--border);
+      padding: 7px 10px;
+    }
+    .item:first-child { border-top: none; }
+    .item-row { display: flex; align-items: flex-start; gap: 10px; }
+
+    .item-check {
+      flex-shrink: 0;
+      width: 24px; height: 24px;
+      border: 2px solid var(--border);
+      border-radius: 50%;
+      cursor: pointer;
+      margin-top: 1px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .item-check:hover { border-color: var(--accent); }
+    .item-check.done { background: var(--done-bg); border-color: #4caf50; }
+
+    .item-body { flex: 1; min-width: 0; cursor: pointer; user-select: none; }
+    .item-text { font-size: 15px; line-height: 1.4; word-break: break-word; }
+    .item-done .item-text { color: var(--text-sub); text-decoration: line-through; }
+    .item-meta { font-size: 12px; color: var(--text-sub); margin-top: 3px; }
+
+    /* 타입 뱃지 */
+    .type-badge {
+      display: inline-block;
+      font-size: 11px;
+      padding: 1px 6px;
+      border-radius: 8px;
+      background: #e3f2fd;
+      color: #1565c0;
+      margin-right: 4px;
+    }
+    .type-badge.monthly { background: #f3e5f5; color: #6a1b9a; }
+
+    /* 항목 액션 패널 */
+    .item-panel {
+      display: none;
+      margin-top: 5px;
+      padding-top: 5px;
+      border-top: 1px solid var(--border);
+    }
+    .item-panel.visible { display: block; }
+
+    .action-btn {
+      font-size: 11px;
+      color: var(--text-sub);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 3px 7px;
+      cursor: pointer;
+      margin-right: 4px;
+      margin-bottom: 2px;
+      white-space: nowrap;
+      transition: color 0.1s, border-color 0.1s;
+    }
+    .action-btn:hover { color: var(--accent); border-color: var(--accent); }
+    .action-btn.danger { color: var(--danger); }
+    .action-btn.danger:hover { border-color: var(--danger); }
+
+    /* ── 추가 폼 ── */
+    .add-form {
+      padding: 10px 12px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .add-form input[type="text"],
+    .add-form select,
+    .add-form input[type="number"] {
+      width: 100%;
+      height: 44px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0 12px;
+      font-size: 15px;
+      font-family: var(--font);
+      background: var(--bg);
+      outline: none;
+      -webkit-appearance: none;
+    }
+    .add-form input[type="text"]:focus,
+    .add-form select:focus,
+    .add-form input[type="number"]:focus { border-color: var(--accent); }
+
+    .form-row { display: flex; gap: 8px; }
+    .form-row > * { flex: 1; }
+
+    .add-form-btn {
+      width: 100%;
+      height: 44px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .add-form-btn:active { background: var(--accent-hover); }
+
+    .hidden-field { display: none; }
+
+    /* 관리 섹션 항목 */
+    .mgmt-item {
+      border-top: 1px solid var(--border);
+      padding: 8px 12px;
+    }
+    .mgmt-item:first-child { border-top: none; }
+    .mgmt-item-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .mgmt-item-text { flex: 1; font-size: 14px; }
+    .mgmt-status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .mgmt-status-dot.idle   { background: #bdbdbd; }
+    .mgmt-status-dot.active { background: #1a73e8; }
+    .mgmt-status-dot.done   { background: #4caf50; }
+
+    .mgmt-panel {
+      display: none;
+      margin-top: 5px;
+      padding-top: 5px;
+      border-top: 1px solid var(--border);
+    }
+    .mgmt-panel.visible { display: block; }
+
+    /* ── 바텀시트 모달 ── */
+    #modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 200;
+      align-items: flex-end;
+    }
+    #modal-overlay.visible { display: flex; }
+    #modal-sheet {
+      background: var(--surface);
+      border-radius: 16px 16px 0 0;
+      padding: 20px 16px 40px;
+      width: 100%;
+      max-width: 600px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    #modal-sheet h2 { font-size: 16px; font-weight: 700; }
+    .modal-label { font-size: 13px; color: var(--text-sub); margin-bottom: 4px; }
+    .modal-input {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      font-size: 15px;
+      font-family: var(--font);
+      outline: none;
+      background: var(--bg);
+    }
+    .modal-input:focus { border-color: var(--accent); }
+    textarea.modal-input { min-height: 70px; resize: vertical; }
+    .modal-select {
+      width: 100%;
+      height: 44px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0 12px;
+      font-size: 15px;
+      font-family: var(--font);
+      background: var(--bg);
+      outline: none;
+      -webkit-appearance: none;
+    }
+    .modal-select:focus { border-color: var(--accent); }
+    .modal-row { display: flex; gap: 8px; }
+    .modal-row > * { flex: 1; }
+    .modal-btns { display: flex; gap: 8px; margin-top: 4px; }
+    .modal-btn-cancel {
+      flex: 1; height: 46px;
+      background: var(--bg); color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: var(--radius); font-size: 15px; cursor: pointer;
+    }
+    .modal-btn-save {
+      flex: 2; height: 46px;
+      background: var(--accent); color: #fff;
+      border: none; border-radius: var(--radius);
+      font-size: 15px; font-weight: 600; cursor: pointer;
+    }
+    .modal-btn-save:active { background: var(--accent-hover); }
+  </style>
+</head>
+<body>
+
+<!-- 상단 고정 헤더 -->
+<div id="top-bar">
+  <div id="header">
+    <h1>반복 업무</h1>
+    <span id="header-date"></span>
+  </div>
+  <div id="sync-status">로드 중…</div>
+</div>
+
+<!-- ① 주간 업무 (active) -->
+<div class="section" id="sec-weekly">
+  <div class="section-header" onclick="toggleSection('weekly')">
+    <div class="section-left">
+      <span class="section-title">주간 업무</span>
+      <span class="section-count" id="cnt-weekly"></span>
+    </div>
+    <span class="section-icon" id="icon-weekly">▼</span>
+  </div>
+  <ul class="item-list" id="list-weekly"></ul>
+</div>
+
+<!-- ② 주간 업무 완료 -->
+<div class="section" id="sec-weekly-done">
+  <div class="section-header" onclick="toggleSection('weekly-done')">
+    <div class="section-left">
+      <span class="section-title">주간 업무 완료</span>
+      <span class="section-count" id="cnt-weekly-done"></span>
+    </div>
+    <span class="section-icon collapsed" id="icon-weekly-done">▼</span>
+  </div>
+  <ul class="item-list hidden" id="list-weekly-done"></ul>
+</div>
+
+<!-- ③ 월간 업무 (active) -->
+<div class="section" id="sec-monthly">
+  <div class="section-header" onclick="toggleSection('monthly')">
+    <div class="section-left">
+      <span class="section-title">월간 업무</span>
+      <span class="section-count" id="cnt-monthly"></span>
+    </div>
+    <span class="section-icon" id="icon-monthly">▼</span>
+  </div>
+  <ul class="item-list" id="list-monthly"></ul>
+</div>
+
+<!-- ④ 월간 업무 완료 -->
+<div class="section" id="sec-monthly-done">
+  <div class="section-header" onclick="toggleSection('monthly-done')">
+    <div class="section-left">
+      <span class="section-title">월간 업무 완료</span>
+      <span class="section-count" id="cnt-monthly-done"></span>
+    </div>
+    <span class="section-icon collapsed" id="icon-monthly-done">▼</span>
+  </div>
+  <ul class="item-list hidden" id="list-monthly-done"></ul>
+</div>
+
+<!-- ⑤ 반복 업무 관리 -->
+<div class="section" id="sec-mgmt">
+  <div class="section-header" onclick="toggleSection('mgmt')">
+    <div class="section-left">
+      <span class="section-title">반복 업무 관리</span>
+      <span class="section-count" id="cnt-mgmt"></span>
+    </div>
+    <span class="section-icon collapsed" id="icon-mgmt">▼</span>
+  </div>
+  <div class="hidden" id="list-mgmt">
+    <ul id="mgmt-item-list"></ul>
+    <div class="add-form">
+      <input type="text" id="add-text" placeholder="업무 이름 입력" autocomplete="off" />
+      <div class="form-row">
+        <select id="add-freq" onchange="onAddFreqChange()">
+          <option value="weekly">매주</option>
+          <option value="biweekly">격주</option>
+          <option value="monthly">매월</option>
+        </select>
+        <!-- 매주/격주: 요일 선택 -->
+        <select id="add-dow">
+          <option value="0">일요일</option>
+          <option value="1" selected>월요일</option>
+          <option value="2">화요일</option>
+          <option value="3">수요일</option>
+          <option value="4">목요일</option>
+          <option value="5">금요일</option>
+          <option value="6">토요일</option>
+        </select>
+        <!-- 매월: 특정일 선택 -->
+        <select id="add-dom" class="hidden-field">
+          <option value="1">1일</option>
+          <option value="2">2일</option>
+          <option value="3">3일</option>
+          <option value="4">4일</option>
+          <option value="5">5일</option>
+          <option value="6">6일</option>
+          <option value="7">7일</option>
+          <option value="8">8일</option>
+          <option value="9">9일</option>
+          <option value="10">10일</option>
+          <option value="11">11일</option>
+          <option value="12">12일</option>
+          <option value="13">13일</option>
+          <option value="14">14일</option>
+          <option value="15">15일</option>
+          <option value="16">16일</option>
+          <option value="17">17일</option>
+          <option value="18">18일</option>
+          <option value="19">19일</option>
+          <option value="20">20일</option>
+          <option value="21">21일</option>
+          <option value="22">22일</option>
+          <option value="23">23일</option>
+          <option value="24">24일</option>
+          <option value="25">25일</option>
+          <option value="26">26일</option>
+          <option value="27">27일</option>
+          <option value="28">28일</option>
+          <option value="29">29일</option>
+          <option value="30">30일</option>
+          <option value="31">31일</option>
+          <option value="0">말일</option>
+        </select>
+      </div>
+      <button class="add-form-btn" onclick="addRecurring()">추가</button>
+    </div>
+  </div>
+</div>
+
+<!-- 바텀시트 수정 모달 -->
+<div id="modal-overlay" onclick="onOverlayClick(event)">
+  <div id="modal-sheet">
+    <h2>반복 업무 수정</h2>
+    <div>
+      <div class="modal-label">업무 이름</div>
+      <input type="text" id="modal-text" class="modal-input" placeholder="업무 이름" />
+    </div>
+    <div>
+      <div class="modal-label">메모 (선택)</div>
+      <textarea id="modal-note" class="modal-input" placeholder="메모를 입력하세요"></textarea>
+    </div>
+    <div>
+      <div class="modal-label">반복 주기</div>
+      <div class="modal-row">
+        <select id="modal-freq" class="modal-select" onchange="onModalFreqChange()">
+          <option value="weekly">매주</option>
+          <option value="biweekly">격주</option>
+          <option value="monthly">매월</option>
+        </select>
+        <select id="modal-dow" class="modal-select">
+          <option value="0">일요일</option>
+          <option value="1">월요일</option>
+          <option value="2">화요일</option>
+          <option value="3">수요일</option>
+          <option value="4">목요일</option>
+          <option value="5">금요일</option>
+          <option value="6">토요일</option>
+        </select>
+        <select id="modal-dom" class="modal-select hidden-field">
+          <option value="1">1일</option>
+          <option value="2">2일</option>
+          <option value="3">3일</option>
+          <option value="4">4일</option>
+          <option value="5">5일</option>
+          <option value="6">6일</option>
+          <option value="7">7일</option>
+          <option value="8">8일</option>
+          <option value="9">9일</option>
+          <option value="10">10일</option>
+          <option value="11">11일</option>
+          <option value="12">12일</option>
+          <option value="13">13일</option>
+          <option value="14">14일</option>
+          <option value="15">15일</option>
+          <option value="16">16일</option>
+          <option value="17">17일</option>
+          <option value="18">18일</option>
+          <option value="19">19일</option>
+          <option value="20">20일</option>
+          <option value="21">21일</option>
+          <option value="22">22일</option>
+          <option value="23">23일</option>
+          <option value="24">24일</option>
+          <option value="25">25일</option>
+          <option value="26">26일</option>
+          <option value="27">27일</option>
+          <option value="28">28일</option>
+          <option value="29">29일</option>
+          <option value="30">30일</option>
+          <option value="31">31일</option>
+          <option value="0">말일</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-btns">
+      <button class="modal-btn-cancel" onclick="closeModal()">취소</button>
+      <button class="modal-btn-save" onclick="saveModal()">저장</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ── 상수 ── */
+const GCP_READ_URL  = 'https://asia-northeast3-infin-stock-bot.cloudfunctions.net/todo-inbox-read';
+const GCP_WRITE_URL = 'https://asia-northeast3-infin-stock-bot.cloudfunctions.net/todo-inbox-write';
+const API_KEY       = 'tZrCvMfEa16iuQdFcnmGyDASHk9l5h3q0oK2xTbLY4wVWpjR';
+const LS_KEY        = 'todo_recurring_data';
+const DAYS_KO       = ['일','월','화','수','목','금','토'];
+
+/*
+  recurring item 스키마:
+  {
+    id: string,
+    text: string,
+    note: string|null,
+    freq: 'weekly' | 'biweekly' | 'monthly',
+    day_of_week: 0~6 (weekly/biweekly 전용, 0=일),
+    day_of_month: 1~31 | 0=말일 (monthly 전용),
+    status: 'idle' | 'active' | 'done',
+    last_done_at: ISO string | null,
+    last_activated_at: ISO string | null   // 격주 계산용
+  }
+*/
+
+/* ── 상태 ── */
+let data = { items: [], topics: [], recurring: [], updated_at: '' };
+let openPanels = {};
+let modalTargetId = null;
+
+/* ── 유틸 ── */
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function genId() {
+  return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+    (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
+}
+
+function setSyncStatus(msg, cls) {
+  const el = document.getElementById('sync-status');
+  el.textContent = msg;
+  el.className = cls || '';
+}
+
+/* ── 날짜 헬퍼 ── */
+function today() {
+  const d = new Date(); d.setHours(0,0,0,0); return d;
+}
+
+// 이번 주 day_of_week 날의 0시 (해당 요일이 오늘 이전이면 지난 주에서 찾음)
+function lastOccurrence(dayOfWeek) {
+  const d = today();
+  let diff = d.getDay() - dayOfWeek;
+  if (diff < 0) diff += 7;
+  d.setDate(d.getDate() - diff);
+  return d;
+}
+
+function getLastDayOfMonth(y, m) {
+  return new Date(y, m + 1, 0).getDate();
+}
+
+function isLastDayOfMonth() {
+  const n = new Date();
+  return n.getDate() === getLastDayOfMonth(n.getFullYear(), n.getMonth());
+}
+
+/* ── 활성화 조건 판단 ── */
+function shouldActivate(r) {
+  if (r.status === 'done') return false;
+  const now = new Date();
+  const todayDate = now.getDate();
+  const todayDay  = now.getDay();
+
+  if (r.freq === 'weekly') {
+    if (todayDay !== r.day_of_week) return false;
+    if (!r.last_done_at) return true;
+    return new Date(r.last_done_at) < lastOccurrence(r.day_of_week);
+  }
+
+  if (r.freq === 'biweekly') {
+    if (todayDay !== r.day_of_week) return false;
+    if (!r.last_activated_at) return true;
+    const diffMs = today() - new Date(r.last_activated_at);
+    return diffMs >= 13 * 24 * 60 * 60 * 1000; // 13일 이상 경과
+  }
+
+  if (r.freq === 'monthly') {
+    const target = r.day_of_month === 0
+      ? getLastDayOfMonth(now.getFullYear(), now.getMonth())
+      : r.day_of_month;
+    if (todayDate !== target) return false;
+    if (!r.last_done_at) return true;
+    const d = new Date(r.last_done_at);
+    return d.getFullYear() < now.getFullYear() ||
+      (d.getFullYear() === now.getFullYear() && d.getMonth() < now.getMonth());
+  }
+
+  return false;
+}
+
+/* ── 활성화 체크 (로드 후 자동 실행) ── */
+function checkActivation() {
+  let changed = false;
+  const nowIso = new Date().toISOString();
+  data.recurring.forEach(r => {
+    if (shouldActivate(r)) {
+      r.status = 'active';
+      if (r.freq === 'biweekly') r.last_activated_at = nowIso;
+      changed = true;
+    }
+  });
+  return changed;
+}
+
+/* ── 서버 통신 ── */
+async function loadFromServer() {
+  setSyncStatus('서버에서 불러오는 중…');
+  try {
+    const res = await fetch(GCP_READ_URL, {
+      headers: { 'X-API-Key': API_KEY }
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    data = {
+      items:     json.items     || [],
+      topics:    json.topics    || [],
+      recurring: json.recurring || [],
+      updated_at: json.updated_at || ''
+    };
+    localStorage.setItem(LS_KEY, JSON.stringify(data));
+    const changed = checkActivation();
+    if (changed) await saveToServer(false);
+    setSyncStatus(`마지막 동기화: ${new Date().toLocaleTimeString('ko-KR')}`, 'ok');
+    renderAll();
+  } catch (e) {
+    setSyncStatus('서버 연결 실패 — 로컬 데이터 사용 중', 'error');
+    const saved = localStorage.getItem(LS_KEY);
+    if (saved) {
+      try { data = JSON.parse(saved); } catch(e2) {}
+      checkActivation();
+      renderAll();
+    }
+  }
+}
+
+async function saveToServer(showStatus = true) {
+  if (showStatus) setSyncStatus('저장 중…');
+  try {
+    const res = await fetch(GCP_WRITE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+      body: JSON.stringify({
+        items: data.items, topics: data.topics, recurring: data.recurring,
+        deleted_ids: [], deleted_topic_ids: []
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    localStorage.setItem(LS_KEY, JSON.stringify(data));
+    if (showStatus) setSyncStatus(`마지막 저장: ${new Date().toLocaleTimeString('ko-KR')}`, 'ok');
+  } catch (e) {
+    if (showStatus) setSyncStatus('저장 실패 (로컬만 적용)', 'error');
+  }
+}
+
+/* ── 레이블 ── */
+function typeLabel(r) {
+  if (r.freq === 'weekly')   return `매주 ${DAYS_KO[r.day_of_week]}`;
+  if (r.freq === 'biweekly') return `격주 ${DAYS_KO[r.day_of_week]}`;
+  if (r.freq === 'monthly') {
+    return r.day_of_month === 0 ? '매월 말일' : `매월 ${r.day_of_month}일`;
+  }
+  return '';
+}
+
+function badgeClass(r) {
+  return r.freq === 'monthly' ? 'monthly' : '';
+}
+
+/* ── 항목 HTML ── */
+function buildItemHtml(r) {
+  const panelVisible = openPanels[r.id] ? 'visible' : '';
+  const isDone = r.status === 'done';
+  const lastDoneStr = r.last_done_at
+    ? `완료: ${new Date(r.last_done_at).toLocaleDateString('ko-KR')}`
+    : '';
+  const noteStr = r.note ? ` · ${escapeHtml(r.note)}` : '';
+
+  const panelBtns = isDone
+    ? `<button class="action-btn" onclick="revertItem('${r.id}')">되돌리기</button>
+       <button class="action-btn danger" onclick="deleteItem('${r.id}')">삭제</button>`
+    : `<button class="action-btn" onclick="openModal('${r.id}')">수정</button>
+       <button class="action-btn danger" onclick="deleteItem('${r.id}')">삭제</button>`;
+
+  return `
+    <li class="item ${isDone ? 'item-done' : ''}" id="item-${r.id}">
+      <div class="item-row">
+        <div class="item-check ${isDone ? 'done' : ''}"
+          onclick="${isDone ? '' : `completeItem('${r.id}')`}"
+          style="${isDone ? 'cursor:default' : ''}">
+          ${isDone ? '✓' : ''}
+        </div>
+        <div class="item-body" onclick="togglePanel('${r.id}')">
+          <div class="item-text">${escapeHtml(r.text)}</div>
+          <div class="item-meta">
+            <span class="type-badge ${badgeClass(r)}">${typeLabel(r)}</span>${noteStr}${lastDoneStr ? ' · ' + lastDoneStr : ''}
+          </div>
+        </div>
+      </div>
+      <div class="item-panel ${panelVisible}" id="panel-${r.id}">
+        ${panelBtns}
+      </div>
+    </li>`;
+}
+
+/* ── 관리 항목 HTML ── */
+function buildMgmtItemHtml(r) {
+  const panelVisible = openPanels['mgmt_' + r.id] ? 'visible' : '';
+  return `
+    <li class="mgmt-item" id="mgmt-${r.id}">
+      <div class="mgmt-item-row" onclick="toggleMgmtPanel('${r.id}')">
+        <div class="mgmt-status-dot ${r.status}"></div>
+        <span class="mgmt-item-text">
+          <span class="type-badge ${badgeClass(r)}">${typeLabel(r)}</span>
+          ${escapeHtml(r.text)}
+        </span>
+        <span style="font-size:12px;color:var(--text-sub)">▼</span>
+      </div>
+      <div class="mgmt-panel ${panelVisible}" id="mgmt-panel-${r.id}">
+        <button class="action-btn" onclick="openModal('${r.id}')">수정</button>
+        <button class="action-btn danger" onclick="deleteItem('${r.id}')">삭제</button>
+      </div>
+    </li>`;
+}
+
+/* ── 렌더링 ── */
+function renderAll() {
+  const isWeekly   = r => r.freq === 'weekly' || r.freq === 'biweekly';
+  const isMonthly  = r => r.freq === 'monthly';
+
+  const weekly      = data.recurring.filter(r => isWeekly(r)  && r.status === 'active');
+  const weeklyDone  = data.recurring.filter(r => isWeekly(r)  && r.status === 'done');
+  const monthly     = data.recurring.filter(r => isMonthly(r) && r.status === 'active');
+  const monthlyDone = data.recurring.filter(r => isMonthly(r) && r.status === 'done');
+
+  setList('list-weekly',      'cnt-weekly',       weekly,      '이번 주 활성 업무가 없습니다');
+  setList('list-weekly-done', 'cnt-weekly-done',  weeklyDone,  '완료된 주간 업무가 없습니다');
+  setList('list-monthly',     'cnt-monthly',      monthly,     '이번 달 활성 업무가 없습니다');
+  setList('list-monthly-done','cnt-monthly-done', monthlyDone, '완료된 월간 업무가 없습니다');
+
+  document.getElementById('cnt-mgmt').textContent =
+    data.recurring.length ? `(${data.recurring.length})` : '';
+  document.getElementById('mgmt-item-list').innerHTML =
+    data.recurring.map(buildMgmtItemHtml).join('');
+}
+
+function setList(listId, cntId, items, emptyMsg) {
+  document.getElementById(cntId).textContent = items.length ? `(${items.length})` : '';
+  document.getElementById(listId).innerHTML = items.length
+    ? items.map(buildItemHtml).join('')
+    : `<li class="empty-msg">${emptyMsg}</li>`;
+}
+
+/* ── 섹션 토글 ── */
+const sectionOpen = { weekly: true, 'weekly-done': false, monthly: true, 'monthly-done': false, mgmt: false };
+
+function toggleSection(key) {
+  sectionOpen[key] = !sectionOpen[key];
+  document.getElementById('list-' + key).classList.toggle('hidden', !sectionOpen[key]);
+  document.getElementById('icon-' + key).classList.toggle('collapsed', !sectionOpen[key]);
+}
+
+/* ── 패널 토글 ── */
+function togglePanel(id) {
+  openPanels[id] = !openPanels[id];
+  const el = document.getElementById('panel-' + id);
+  if (el) el.classList.toggle('visible', !!openPanels[id]);
+}
+
+function toggleMgmtPanel(id) {
+  const key = 'mgmt_' + id;
+  openPanels[key] = !openPanels[key];
+  const el = document.getElementById('mgmt-panel-' + id);
+  if (el) el.classList.toggle('visible', !!openPanels[key]);
+}
+
+/* ── 완료 / 되돌리기 / 삭제 ── */
+function completeItem(id) {
+  const r = data.recurring.find(x => x.id === id);
+  if (!r) return;
+  r.status = 'done';
+  r.last_done_at = new Date().toISOString();
+  delete openPanels[id];
+  renderAll(); saveToServer();
+}
+
+function revertItem(id) {
+  const r = data.recurring.find(x => x.id === id);
+  if (!r) return;
+  r.status = 'active';
+  r.last_done_at = null;
+  delete openPanels[id];
+  renderAll(); saveToServer();
+}
+
+function deleteItem(id) {
+  if (!confirm('이 반복 업무를 삭제할까요?')) return;
+  data.recurring = data.recurring.filter(x => x.id !== id);
+  delete openPanels[id]; delete openPanels['mgmt_' + id];
+  renderAll(); saveToServer();
+}
+
+/* ── 추가 폼 UI 연동 ── */
+function onAddFreqChange() {
+  const freq = document.getElementById('add-freq').value;
+  document.getElementById('add-dow').classList.toggle('hidden-field', freq === 'monthly');
+  document.getElementById('add-dom').classList.toggle('hidden-field', freq !== 'monthly');
+}
+
+/* ── 추가 ── */
+function addRecurring() {
+  const textEl = document.getElementById('add-text');
+  const text = textEl.value.trim();
+  if (!text) { textEl.focus(); return; }
+
+  const freq = document.getElementById('add-freq').value;
+  const newItem = {
+    id: genId(), text, note: null, freq,
+    day_of_week:   freq !== 'monthly' ? parseInt(document.getElementById('add-dow').value, 10) : null,
+    day_of_month:  freq === 'monthly' ? parseInt(document.getElementById('add-dom').value, 10) : null,
+    status: 'idle',
+    last_done_at: null,
+    last_activated_at: null
+  };
+  data.recurring.push(newItem);
+  textEl.value = '';
+  renderAll(); saveToServer();
+}
+
+document.getElementById('add-text').addEventListener('keydown', e => {
+  if (e.key === 'Enter') addRecurring();
+});
+
+/* ── 모달 UI 연동 ── */
+function onModalFreqChange() {
+  const freq = document.getElementById('modal-freq').value;
+  document.getElementById('modal-dow').classList.toggle('hidden-field', freq === 'monthly');
+  document.getElementById('modal-dom').classList.toggle('hidden-field', freq !== 'monthly');
+}
+
+/* ── 모달 열기/닫기/저장 ── */
+function openModal(id) {
+  const r = data.recurring.find(x => x.id === id);
+  if (!r) return;
+  modalTargetId = id;
+  document.getElementById('modal-text').value = r.text || '';
+  document.getElementById('modal-note').value = r.note || '';
+  document.getElementById('modal-freq').value = r.freq || 'weekly';
+  if (r.day_of_week != null)  document.getElementById('modal-dow').value = r.day_of_week;
+  if (r.day_of_month != null) document.getElementById('modal-dom').value = r.day_of_month;
+  onModalFreqChange();
+  document.getElementById('modal-overlay').classList.add('visible');
+  document.getElementById('modal-text').focus();
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('visible');
+  modalTargetId = null;
+}
+
+function onOverlayClick(e) {
+  if (e.target === document.getElementById('modal-overlay')) closeModal();
+}
+
+function saveModal() {
+  if (!modalTargetId) return;
+  const r = data.recurring.find(x => x.id === modalTargetId);
+  if (!r) return;
+  const newText = document.getElementById('modal-text').value.trim();
+  if (!newText) { document.getElementById('modal-text').focus(); return; }
+  const freq = document.getElementById('modal-freq').value;
+  r.text = newText;
+  r.note = document.getElementById('modal-note').value.trim() || null;
+  r.freq = freq;
+  r.day_of_week  = freq !== 'monthly' ? parseInt(document.getElementById('modal-dow').value, 10) : null;
+  r.day_of_month = freq === 'monthly' ? parseInt(document.getElementById('modal-dom').value, 10) : null;
+  closeModal();
+  renderAll(); saveToServer();
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+/* ── 날짜 표시 ── */
+function renderDate() {
+  const now = new Date();
+  document.getElementById('header-date').textContent =
+    `${now.getMonth()+1}/${now.getDate()}(${DAYS_KO[now.getDay()]})`;
+}
+
+/* ── 초기화 ── */
+function init() {
+  renderDate();
+  const saved = localStorage.getItem(LS_KEY);
+  if (saved) {
+    try { data = JSON.parse(saved); renderAll(); } catch(e) {}
+  }
+  loadFromServer();
+}
+
+init();
+</script>
+</body>
+</html>
