@@ -294,12 +294,32 @@
       font-size: 15px; font-weight: 600; cursor: pointer;
     }
     .modal-btn-save:active { background: var(--accent-hover); }
+
+    /* ── 탭 바 ── */
+    #tab-bar {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab-link {
+      flex: 1; padding: 10px 0; text-align: center;
+      font-size: 14px; font-weight: 600;
+      text-decoration: none; color: var(--text-sub);
+      border-bottom: 2px solid transparent;
+    }
+    .tab-link.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
   </style>
 </head>
 <body>
 
 <!-- 상단 고정 헤더 -->
 <div id="top-bar">
+  <div id="tab-bar">
+    <a class="tab-link" href="index.html">할 일</a>
+    <a class="tab-link active" href="recurring.html">반복 업무</a>
+  </div>
   <div id="header">
     <h1>반복 업무</h1>
     <span id="header-date"></span>

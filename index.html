@@ -228,15 +228,20 @@
       margin-top: 2px;
     }
 
-    /* 항목 액션 버튼 (우측) */
+    /* 항목 액션 패널 (클릭 시 아랫줄 펼침) */
+    .item-panel {
+      display: none;
+      margin-top: 5px;
+      padding-top: 5px;
+      border-top: 1px solid var(--border);
+    }
+    .item-panel.visible { display: block; }
+
     .item-actions {
-      flex-shrink: 0;
       display: flex;
       flex-direction: row;
       flex-wrap: wrap;
-      gap: 3px;
-      align-items: center;
-      justify-content: flex-end;
+      gap: 4px;
     }
     .action-btn {
       font-size: 11px;
@@ -244,13 +249,14 @@
       background: none;
       border: 1px solid var(--border);
       border-radius: 5px;
-      padding: 2px 5px;
+      padding: 3px 7px;
       cursor: pointer;
       white-space: nowrap;
       transition: color 0.1s, border-color 0.1s;
     }
     .action-btn:hover { color: var(--accent); border-color: var(--accent); }
     .action-btn.danger:hover { color: var(--danger); border-color: var(--danger); }
+    .item-text { cursor: pointer; user-select: none; }
 
     /* ── 주제 관리 영역 ── */
     .topic-header-row {
@@ -399,10 +405,9 @@
       cursor: pointer;
     }
 
-    /* ── 항목 메모 (토글) ── */
+    /* ── 항목 메모 ── */
     .item-note {
-      display: none;
-      margin-top: 6px;
+      margin-bottom: 6px;
       font-size: 13px;
       color: var(--text-sub);
       line-height: 1.5;
@@ -412,7 +417,6 @@
       border-radius: 6px;
       padding: 6px 8px;
     }
-    .item-note.visible { display: block; }
     .note-indicator { font-size: 11px; color: var(--text-sub); margin-left: 4px; }
 
     /* ── 메모 입력 (입력 패널) ── */
@@ -453,9 +457,33 @@
     }
     .edit-save-btn { background: var(--accent); color: #fff; border: none; }
     .edit-cancel-btn { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+
+    /* ── 탭 바 ── */
+    #tab-bar {
+      position: sticky; top: 0; z-index: 200;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+    }
+    .tab-link {
+      flex: 1; padding: 10px 0; text-align: center;
+      font-size: 14px; font-weight: 600;
+      text-decoration: none; color: var(--text-sub);
+      border-bottom: 2px solid transparent;
+    }
+    .tab-link.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
   </style>
 </head>
 <body>
+
+<!-- ── 탭 바 ── -->
+<div id="tab-bar">
+  <a class="tab-link active" href="index.html">할 일</a>
+  <a class="tab-link" href="recurring.html">반복 업무</a>
+</div>
 
 <!-- ── 상단 고정 입력 패널 ── -->
 <div id="input-panel">
@@ -798,20 +826,21 @@ function itemHTML(item, context) {
     const doneMeta = item.completed_at
       ? `<span class="item-meta">완료 ${item.completed_at.slice(0, 10)}</span>`
       : '';
-    const doneNoteToggle = item.note ? `onclick="toggleItemNote('${item.id}')" style="cursor:pointer"` : '';
-    const doneNoteIcon   = item.note ? '<span class="note-indicator">📝</span>' : '';
-    const doneNoteHtml   = item.note ? `<div class="item-note" id="note-${item.id}">${escapeHtml(item.note)}</div>` : '';
+    const noteIcon = item.note ? '<span class="note-indicator">📝</span>' : '';
+    const noteHtml = item.note ? `<div class="item-note">${escapeHtml(item.note)}</div>` : '';
     return `
       <li class="item item-done" id="item-${item.id}">
         ${badge}
         <div class="item-body">
-          <div class="item-text" ${doneNoteToggle}>${escapeHtml(item.text)}${doneNoteIcon}</div>
+          <div class="item-text" onclick="toggleItemPanel('${item.id}')">${escapeHtml(item.text)}${noteIcon}</div>
           ${doneMeta}
-          ${doneNoteHtml}
-        </div>
-        <div class="item-actions">
-          <button class="action-btn" onclick="restoreItem('${item.id}')">되돌리기</button>
-          <button class="action-btn danger" onclick="deleteItem('${item.id}')">삭제</button>
+          <div class="item-panel" id="panel-${item.id}">
+            ${noteHtml}
+            <div class="item-actions">
+              <button class="action-btn" onclick="restoreItem('${item.id}')">되돌리기</button>
+              <button class="action-btn danger" onclick="deleteItem('${item.id}')">삭제</button>
+            </div>
+          </div>
         </div>
       </li>`;
   }
@@ -828,24 +857,25 @@ function itemHTML(item, context) {
     : `<button class="action-btn" onclick="moveToTop('${item.id}')">위로</button>`;
   const moveBtn     = `<button class="action-btn" onclick="openMoveModal('${item.id}')">이동</button>`;
 
-  const noteToggle = item.note ? `onclick="toggleItemNote('${item.id}')" style="cursor:pointer"` : '';
-  const noteIcon   = item.note ? '<span class="note-indicator">📝</span>' : '';
-  const noteHtml   = item.note ? `<div class="item-note" id="note-${item.id}">${escapeHtml(item.note)}</div>` : '';
+  const noteIcon = item.note ? '<span class="note-indicator">📝</span>' : '';
+  const noteHtml = item.note ? `<div class="item-note">${escapeHtml(item.note)}</div>` : '';
 
   return `
     <li class="item" id="item-${item.id}">
       <span class="item-check" onclick="completeItem('${item.id}')"></span>
       ${badge}
       <div class="item-body">
-        <div class="item-text" ${noteToggle}>${escapeHtml(item.text)}${noteIcon}</div>
+        <div class="item-text" onclick="toggleItemPanel('${item.id}')">${escapeHtml(item.text)}${noteIcon}</div>
         ${dateMeta}
-        ${noteHtml}
-      </div>
-      <div class="item-actions">
-        ${moveTopBtn}
-        ${moveBtn}
-        <button class="action-btn" onclick="openEditModal('${item.id}')">수정</button>
-        <button class="action-btn danger" onclick="deleteItem('${item.id}')">삭제</button>
+        <div class="item-panel" id="panel-${item.id}">
+          ${noteHtml}
+          <div class="item-actions">
+            ${moveTopBtn}
+            ${moveBtn}
+            <button class="action-btn" onclick="openEditModal('${item.id}')">수정</button>
+            <button class="action-btn danger" onclick="deleteItem('${item.id}')">삭제</button>
+          </div>
+        </div>
       </div>
     </li>`;
 }
@@ -1067,10 +1097,10 @@ function copyTrigger() {
   });
 }
 
-/* 항목 메모 펼치기/닫기 */
-function toggleItemNote(id) {
-  const noteEl = document.getElementById(`note-${id}`);
-  if (noteEl) noteEl.classList.toggle('visible');
+/* 항목 패널(메모+버튼) 펼치기/닫기 */
+function toggleItemPanel(id) {
+  const panel = document.getElementById(`panel-${id}`);
+  if (panel) panel.classList.toggle('visible');
 }
 
 /* 수정 모달 열기 */
