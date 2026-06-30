@@ -475,6 +475,13 @@
       color: var(--accent);
       border-bottom-color: var(--accent);
     }
+    #last-processed {
+      font-size: 11px;
+      color: var(--text-sub);
+      text-align: center;
+      padding: 4px 0 2px;
+      background: var(--surface);
+    }
   </style>
 </head>
 <body>
@@ -484,6 +491,7 @@
   <a class="tab-link active" href="index.html">할 일</a>
   <a class="tab-link" href="recurring.html">반복 업무</a>
 </div>
+<div id="last-processed"></div>
 
 <!-- ── 상단 고정 입력 패널 ── -->
 <div id="input-panel">
@@ -605,7 +613,8 @@ const GRADE_ORDER = { S: 0, A: 1, B: 2, C: 3, null: 4 };
 let state = {
   items: [],
   topics: [],
-  updated_at: null
+  updated_at: null,
+  last_processed_at: null
 };
 
 /* 입력 UI 임시 상태 */
@@ -751,6 +760,23 @@ function renderAll() {
   renderInbox();
   renderTopics();
   renderDone();
+  renderLastProcessed();
+}
+
+/* 받은편지함 자동 정리(Routine) 마지막 실행 시각 표시 */
+function renderLastProcessed() {
+  const el = document.getElementById('last-processed');
+  if (!state.last_processed_at) {
+    el.textContent = '';
+    return;
+  }
+  const d = new Date(state.last_processed_at);
+  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  const mm = String(kst.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(kst.getUTCDate()).padStart(2, '0');
+  const hh = String(kst.getUTCHours()).padStart(2, '0');
+  const mi = String(kst.getUTCMinutes()).padStart(2, '0');
+  el.textContent = `마지막 정리: ${mm}/${dd} ${hh}:${mi}`;
 }
 
 /* 중요 섹션: important=true 이고 아직 완료 안 된 항목, 등급순 S→A→B→C */
