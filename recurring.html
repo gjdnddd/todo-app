@@ -538,7 +538,9 @@ const DAYS_KO       = ['일','월','화','수','목','금','토'];
     day_of_month: 1~31 | 0=말일 (monthly 전용),
     status: 'idle' | 'active' | 'done',
     last_done_at: ISO string | null,
-    last_activated_at: ISO string | null   // 격주 계산용
+    last_activated_at: ISO string | null,  // 격주 계산용
+    activated_at: ISO string | null,       // 이번 주기 활성화된 시각
+    skipped: boolean                       // 완료 대신 스킵으로 처리됐는지
   }
 */
 
@@ -546,6 +548,20 @@ const DAYS_KO       = ['일','월','화','수','목','금','토'];
 let data = { items: [], topics: [], recurring: [], updated_at: '' };
 let openPanels = {};
 let modalTargetId = null;
+/* 서버에 아직 반영 안 된 반복업무 삭제 목록 (index.html의 pendingDel과 동일한 원리) */
+let pendingDelRecurring = [];
+const LS_DEL_KEY = 'todo_recurring_pending_del';
+
+function loadPendingDelRecurring() {
+  try {
+    const raw = localStorage.getItem(LS_DEL_KEY);
+    const arr = raw ? JSON.parse(raw) : null;
+    if (Array.isArray(arr)) pendingDelRecurring = arr;
+  } catch { /* 무시 */ }
+}
+function savePendingDelRecurring() {
+  localStorage.setItem(LS_DEL_KEY, JSON.stringify(pendingDelRecurring));
+}
 
 /* ── 유틸 ── */
 function escapeHtml(str) {
@@ -629,6 +645,7 @@ function checkActivation() {
   const nowIso = new Date().toISOString();
   data.recurring.forEach(r => {
     if (shouldActivate(r)) {
+      if (r.status !== 'active') r.activated_at = nowIso;
       r.status = 'active';
       if (r.freq === 'biweekly') r.last_activated_at = nowIso;
       changed = true;
@@ -652,6 +669,11 @@ async function loadFromServer() {
       recurring: json.recurring || [],
       updated_at: json.updated_at || ''
     };
+    /* 아직 서버에 반영 안 된 삭제분을 미리 걸러낸다 (부활 방지) */
+    if (pendingDelRecurring.length) {
+      const delSet = new Set(pendingDelRecurring);
+      data.recurring = data.recurring.filter(r => !delSet.has(r.id));
+    }
     localStorage.setItem(LS_KEY, JSON.stringify(data));
     const changed = checkActivation();
     if (changed) await saveToServer(false);
@@ -676,10 +698,13 @@ async function saveToServer(showStatus = true) {
       headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
       body: JSON.stringify({
         items: data.items, topics: data.topics, recurring: data.recurring,
-        deleted_ids: [], deleted_topic_ids: []
+        deleted_ids: [], deleted_topic_ids: [],
+        deleted_recurring_ids: pendingDelRecurring
       })
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    pendingDelRecurring = [];
+    savePendingDelRecurring();
     localStorage.setItem(LS_KEY, JSON.stringify(data));
     if (showStatus) setSyncStatus(`마지막 저장: ${new Date().toLocaleTimeString('ko-KR')}`, 'ok');
   } catch (e) {
@@ -702,18 +727,26 @@ function badgeClass(r) {
 }
 
 /* ── 항목 HTML ── */
+/* M/D 형식으로 날짜 포맷 */
+function formatMD(iso) {
+  const d = new Date(iso);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
 function buildItemHtml(r) {
   const panelVisible = openPanels[r.id] ? 'visible' : '';
   const isDone = r.status === 'done';
   const lastDoneStr = r.last_done_at
-    ? `완료: ${new Date(r.last_done_at).toLocaleDateString('ko-KR')}`
+    ? `${r.skipped ? '스킵' : '완료'}: ${new Date(r.last_done_at).toLocaleDateString('ko-KR')}`
     : '';
   const noteStr = r.note ? ` · ${escapeHtml(r.note)}` : '';
+  const datePrefix = (!isDone && r.activated_at) ? `${formatMD(r.activated_at)} ` : '';
 
   const panelBtns = isDone
     ? `<button class="action-btn" onclick="revertItem('${r.id}')">되돌리기</button>
        <button class="action-btn danger" onclick="deleteItem('${r.id}')">삭제</button>`
     : `<button class="action-btn" onclick="openModal('${r.id}')">수정</button>
+       <button class="action-btn" onclick="skipItem('${r.id}')">스킵</button>
        <button class="action-btn danger" onclick="deleteItem('${r.id}')">삭제</button>`;
 
   return `
@@ -725,7 +758,7 @@ function buildItemHtml(r) {
           ${isDone ? '✓' : ''}
         </div>
         <div class="item-body" onclick="togglePanel('${r.id}')">
-          <div class="item-text">${escapeHtml(r.text)}</div>
+          <div class="item-text">${datePrefix}${escapeHtml(r.text)}</div>
           <div class="item-meta">
             <span class="type-badge ${badgeClass(r)}">${typeLabel(r)}</span>${noteStr}${lastDoneStr ? ' · ' + lastDoneStr : ''}
           </div>
@@ -814,6 +847,17 @@ function completeItem(id) {
   if (!r) return;
   r.status = 'done';
   r.last_done_at = new Date().toISOString();
+  r.skipped = false;
+  delete openPanels[id];
+  renderAll(); saveToServer();
+}
+
+function skipItem(id) {
+  const r = data.recurring.find(x => x.id === id);
+  if (!r) return;
+  r.status = 'done';
+  r.last_done_at = new Date().toISOString();
+  r.skipped = true;
   delete openPanels[id];
   renderAll(); saveToServer();
 }
@@ -823,6 +867,7 @@ function revertItem(id) {
   if (!r) return;
   r.status = 'active';
   r.last_done_at = null;
+  r.skipped = false;
   delete openPanels[id];
   renderAll(); saveToServer();
 }
@@ -830,6 +875,8 @@ function revertItem(id) {
 function deleteItem(id) {
   if (!confirm('이 반복 업무를 삭제할까요?')) return;
   data.recurring = data.recurring.filter(x => x.id !== id);
+  if (!pendingDelRecurring.includes(id)) pendingDelRecurring.push(id);
+  savePendingDelRecurring();
   delete openPanels[id]; delete openPanels['mgmt_' + id];
   renderAll(); saveToServer();
 }
@@ -854,7 +901,9 @@ function addRecurring() {
     day_of_month:  freq === 'monthly' ? parseInt(document.getElementById('add-dom').value, 10) : null,
     status: 'idle',
     last_done_at: null,
-    last_activated_at: null
+    last_activated_at: null,
+    activated_at: null,
+    skipped: false
   };
   data.recurring.push(newItem);
   textEl.value = '';
@@ -924,6 +973,7 @@ function renderDate() {
 /* ── 초기화 ── */
 function init() {
   renderDate();
+  loadPendingDelRecurring();
   const saved = localStorage.getItem(LS_KEY);
   if (saved) {
     try { data = JSON.parse(saved); renderAll(); } catch(e) {}
