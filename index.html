@@ -1,596 +1,367 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <title>받은편지함</title>
-  <style>
-    /* ── CSS 변수 ── */
-    :root {
-      --bg:          #f5f5f5;
-      --surface:     #ffffff;
-      --border:      #e0e0e0;
-      --text:        #1a1a1a;
-      --text-sub:    #666666;
-      --accent:      #1a73e8;
-      --accent-hover:#1557b0;
-      --danger:      #d32f2f;
-      --done-bg:     #e8f5e9;
-      --radius:      10px;
-      --input-h:     48px;
-      --section-pad: 10px;
-      --item-pad:    7px 10px;
-      --font:        -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    }
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<title>할 일 관리</title>
+<style>
+  :root {
+    --bg:          #f5f5f5;
+    --surface:     #ffffff;
+    --border:      #e0e0e0;
+    --text:        #1a1a1a;
+    --text-sub:    #666666;
+    --accent:      #1a73e8;
+    --accent-hover:#1557b0;
+    --danger:      #d32f2f;
+    --done-bg:     #e8f5e9;
+    --radius:      10px;
+    --input-h:     48px;
+    --section-pad: 10px;
+    --item-pad:    7px 10px;
+    --font:        -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; padding-bottom: 40px; }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+  /* 최상위 탭 */
+  #top-tab-bar {
+    position: sticky; top: 0; z-index: 300;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex;
+  }
+  .top-tab {
+    flex: 1; padding: 12px 0; text-align: center;
+    font-size: 15px; font-weight: 600; cursor: pointer;
+    color: var(--text-sub); border-bottom: 2px solid transparent; background: none; border-top:none; border-left:none; border-right:none;
+    font-family: var(--font);
+  }
+  .top-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
-    body {
-      font-family: var(--font);
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      padding-bottom: 40px;
-    }
+  .top-view { display: none; }
+  .top-view.active { display: block; }
 
-    /* ── 입력 패널 (상단 고정) ── */
-    #input-panel {
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 8px 10px;
-    }
+  /* GTD 서브탭 */
+  #gtd-tab-bar {
+    position: sticky; top: 45px; z-index: 290;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; overflow-x: auto; white-space: nowrap;
+  }
+  .gtd-tab {
+    padding: 10px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+    color: var(--text-sub); border-bottom: 2px solid transparent; background: none; border-top:none; border-left:none; border-right:none;
+    font-family: var(--font); flex-shrink: 0;
+  }
+  .gtd-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .gtd-view { display: none; }
+  .gtd-view.active { display: block; }
 
-    #input-text {
-      width: 100%;
-      height: var(--input-h);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 0 14px;
-      font-size: 16px;       /* iOS zoom 방지 */
-      font-family: var(--font);
-      outline: none;
-      background: var(--bg);
-    }
-    #input-text:focus { border-color: var(--accent); }
+  /* 입력 패널 */
+  #input-panel { background: var(--surface); border-bottom: 1px solid var(--border); padding: 10px; }
+  #input-text {
+    width: 100%; height: var(--input-h); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 0 14px; font-size: 16px; font-family: var(--font); outline: none; background: var(--bg);
+  }
+  #input-text:focus { border-color: var(--accent); }
+  #input-note {
+    width: 100%; margin-top: 8px; border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 8px 14px; font-size: 14px; font-family: var(--font); outline: none; resize: none; background: var(--bg);
+  }
+  #input-add-btn {
+    width: 100%; height: 46px; margin-top: 10px; background: var(--accent); color: #fff; border: none;
+    border-radius: var(--radius); font-size: 16px; font-weight: 600; cursor: pointer;
+  }
+  #input-add-btn:active { background: var(--accent-hover); }
+  .toggle-row { display: flex; gap: 10px; margin-top: 8px; align-items: center; }
+  .toggle-btn {
+    height: 36px; padding: 0 14px; border: 1px solid var(--border); border-radius: 18px;
+    background: var(--surface); font-size: 14px; cursor: pointer; font-family: var(--font);
+  }
+  #trigger-panel {
+    display: none; margin-top: 8px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 10px 12px;
+  }
+  #trigger-panel.visible { display: block; }
+  #trigger-text-display {
+    font-size: 12px; font-family: monospace; white-space: pre-wrap; color: var(--text);
+    line-height: 1.5; margin-bottom: 8px; word-break: break-all;
+  }
+  #trigger-copy-btn {
+    width: 100%; height: 34px; background: var(--accent); color: #fff; border: none;
+    border-radius: var(--radius); font-size: 14px; cursor: pointer;
+  }
 
-    /* 토글 행 */
-    .toggle-row {
-      display: flex;
-      gap: 10px;
-      margin-top: 8px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
+  /* 섹션 공통 */
+  .section { margin: 6px 10px 0; background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; }
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between; padding: var(--section-pad);
+    background: var(--surface); border-bottom: 1px solid var(--border); cursor: pointer; user-select: none;
+  }
+  .section-title { font-size: 15px; font-weight: 600; }
+  .section-count { font-size: 13px; color: var(--text-sub); margin-left: 6px; }
+  .item-list { list-style: none; }
 
-    /* 토글 버튼 (날짜 / 중요) */
-    .toggle-btn {
-      height: 36px;
-      padding: 0 14px;
-      border: 1px solid var(--border);
-      border-radius: 18px;
-      background: var(--surface);
-      font-size: 14px;
-      cursor: pointer;
-      user-select: none;
-      transition: background 0.15s, border-color 0.15s;
-    }
-    .toggle-btn.active {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #fff;
-    }
+  .item { display: flex; align-items: flex-start; padding: var(--item-pad); border-top: 1px solid var(--border); gap: 10px; position: relative; }
+  .item:first-child { border-top: none; }
+  .item-check {
+    flex-shrink: 0; width: 24px; height: 24px; border: 2px solid var(--border); border-radius: 50%;
+    cursor: pointer; margin-top: 2px; display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .item-check.done { background: var(--done-bg); border-color: #4caf50; }
+  .item-body { flex: 1; min-width: 0; }
+  .item-text { font-size: 15px; line-height: 1.4; word-break: break-word; cursor: pointer; user-select: none; }
+  .item-meta { font-size: 12px; color: var(--text-sub); margin-top: 3px; }
+  .item-done .item-text { color: var(--text-sub); text-decoration: line-through; }
+  .grade-badge { font-size: 14px; flex-shrink: 0; margin-top: 2px; }
 
-    /* 날짜 입력 */
-    #date-input {
-      height: 36px;
-      padding: 0 10px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      font-size: 14px;
-      font-family: var(--font);
-      display: none;
-    }
-    #date-input.visible { display: block; }
+  .item-panel { display: none; margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--border); }
+  .item-panel.visible { display: block; }
+  .item-actions { display: flex; flex-direction: row; flex-wrap: wrap; gap: 4px; }
+  .action-btn {
+    font-size: 11px; color: var(--text-sub); background: none; border: 1px solid var(--border); border-radius: 5px;
+    padding: 3px 7px; cursor: pointer; white-space: nowrap; transition: color 0.1s, border-color 0.1s;
+  }
+  .action-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .action-btn.danger:hover { color: var(--danger); border-color: var(--danger); }
 
-    /* 등급 선택 (S/A/B/C 버튼 그룹) */
-    #grade-row {
-      display: none;
-      gap: 8px;
-      margin-top: 8px;
-    }
-    #grade-row.visible { display: flex; }
+  .item-note { margin-bottom: 6px; font-size: 13px; color: var(--text-sub); line-height: 1.5; white-space: pre-wrap; word-break: break-word; background: var(--bg); border-radius: 6px; padding: 6px 8px; }
 
-    .grade-btn {
-      flex: 1;
-      height: 40px;
-      border: 2px solid var(--border);
-      border-radius: var(--radius);
-      background: var(--surface);
-      font-size: 15px;
-      cursor: pointer;
-      transition: background 0.15s, border-color 0.15s;
-    }
-    .grade-btn[data-grade="S"].selected { background: #fde8e8; border-color: #e53935; }
-    .grade-btn[data-grade="A"].selected { background: #fff3e0; border-color: #fb8c00; }
-    .grade-btn[data-grade="B"].selected { background: #fffde7; border-color: #fbc02d; }
-    .grade-btn[data-grade="C"].selected { background: #f5f5f5; border-color: #9e9e9e; }
+  /* 주제 그룹 헤더 (섹션 내부) */
+  .topic-group-title { font-size: 12px; font-weight: 700; color: var(--text-sub); padding: 8px 10px 2px; }
 
-    /* 추가 버튼 */
-    #add-btn {
-      width: 100%;
-      height: 46px;
-      margin-top: 10px;
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      border-radius: var(--radius);
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-    #add-btn:active { background: var(--accent-hover); }
+  /* 상태바 */
+  #status-bar { font-size: 11px; color: var(--text-sub); text-align: center; padding: 4px 14px; min-height: 14px; }
+  #status-bar.error { color: var(--danger); }
 
-    /* ── 섹션 공통 ── */
-    .section {
-      margin: 6px 10px 0;
-      background: var(--surface);
-      border-radius: var(--radius);
-      border: 1px solid var(--border);
-      overflow: hidden;
-    }
-    .section-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: var(--section-pad);
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      cursor: pointer;
-      user-select: none;
-    }
-    .section-title {
-      font-size: 15px;
-      font-weight: 600;
-    }
-    .section-count {
-      font-size: 13px;
-      color: var(--text-sub);
-      margin-left: 6px;
-    }
-    .section-toggle-icon {
-      font-size: 12px;
-      color: var(--text-sub);
-      transition: transform 0.2s;
-    }
-    .section-toggle-icon.collapsed { transform: rotate(-90deg); }
+  .empty-hint { padding: 20px 14px; text-align: center; color: var(--text-sub); font-size: 14px; }
 
-    /* 항목 목록 */
-    .item-list { list-style: none; }
-    .item-list.hidden { display: none; }
+  /* 모달 */
+  #modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 400; align-items: flex-end; }
+  #modal-overlay.visible { display: flex; }
+  #modal-box { width: 100%; background: var(--surface); border-radius: 16px 16px 0 0; padding: 16px 0 30px; max-height: 85vh; overflow-y: auto; }
+  .modal-title { font-size: 15px; font-weight: 600; padding: 0 16px 12px; border-bottom: 1px solid var(--border); margin-bottom: 6px; }
+  .edit-form { padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .edit-form input, .edit-form textarea, .edit-form select {
+    width: 100%; border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px;
+    font-size: 15px; font-family: var(--font); outline: none; background: var(--surface);
+  }
+  .edit-form textarea { height: 70px; resize: vertical; }
+  .edit-form-actions { display: flex; gap: 8px; }
+  .edit-form-actions button { flex: 1; height: 44px; border-radius: var(--radius); font-size: 15px; font-weight: 600; cursor: pointer; }
+  .edit-save-btn { background: var(--accent); color: #fff; border: none; }
+  .edit-cancel-btn { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+  .modal-option { display: block; width: 100%; padding: 14px 16px; text-align: left; background: none; border: none; font-size: 15px; cursor: pointer; font-family: var(--font); }
+  .modal-option:hover { background: var(--bg); }
+  .modal-option.cancel { color: var(--text-sub); }
+  .field-label { font-size: 12px; color: var(--text-sub); margin-bottom: -4px; }
+  .hidden-field { display: none; }
 
-    /* 개별 항목 */
-    .item {
-      display: flex;
-      align-items: flex-start;
-      padding: var(--item-pad);
-      border-top: 1px solid var(--border);
-      gap: 10px;
-      position: relative;
-    }
-    .item:first-child { border-top: none; }
+  /* 체크리스트 세트 (반복업무) */
+  .checklist-set { border-top: 1px solid var(--border); padding: var(--item-pad); }
+  .checklist-set:first-child { border-top: none; }
+  .checklist-set-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .checklist-sub-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 14px; }
+  .checklist-sub-check { width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; cursor: pointer; flex-shrink: 0; display:flex; align-items:center; justify-content:center; font-size: 12px; }
+  .checklist-sub-check.done { background: var(--done-bg); border-color: #4caf50; }
+  .checklist-sub-text.done { text-decoration: line-through; color: var(--text-sub); }
 
-    /* 완료 체크 버튼 */
-    .item-check {
-      flex-shrink: 0;
-      width: 24px;
-      height: 24px;
-      border: 2px solid var(--border);
-      border-radius: 50%;
-      cursor: pointer;
-      margin-top: 2px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background 0.15s, border-color 0.15s;
-    }
-    .item-check:hover { border-color: var(--accent); }
-    .item-check.done { background: var(--done-bg); border-color: #4caf50; }
-
-    /* 항목 본문 */
-    .item-body {
-      flex: 1;
-      min-width: 0;
-    }
-    .item-text {
-      font-size: 15px;
-      line-height: 1.4;
-      word-break: break-word;
-    }
-    .item-meta {
-      font-size: 12px;
-      color: var(--text-sub);
-      margin-top: 3px;
-    }
-
-    /* 완료(보관) 항목: 흐리게 + 취소선 */
-    .item-done .item-text { color: var(--text-sub); text-decoration: line-through; }
-
-    /* 등급 뱃지 */
-    .grade-badge {
-      font-size: 14px;
-      flex-shrink: 0;
-      margin-top: 2px;
-    }
-
-    /* 항목 액션 패널 (클릭 시 아랫줄 펼침) */
-    .item-panel {
-      display: none;
-      margin-top: 5px;
-      padding-top: 5px;
-      border-top: 1px solid var(--border);
-    }
-    .item-panel.visible { display: block; }
-
-    .item-actions {
-      display: flex;
-      flex-direction: row;
-      flex-wrap: wrap;
-      gap: 4px;
-    }
-    .action-btn {
-      font-size: 11px;
-      color: var(--text-sub);
-      background: none;
-      border: 1px solid var(--border);
-      border-radius: 5px;
-      padding: 3px 7px;
-      cursor: pointer;
-      white-space: nowrap;
-      transition: color 0.1s, border-color 0.1s;
-    }
-    .action-btn:hover { color: var(--accent); border-color: var(--accent); }
-    .action-btn.danger:hover { color: var(--danger); border-color: var(--danger); }
-    .item-text { cursor: pointer; user-select: none; }
-
-    /* ── 주제 관리 영역 ── */
-    .topic-header-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: var(--section-pad);
-      border-bottom: 1px solid var(--border);
-      cursor: pointer;
-    }
-    .topic-name-wrap {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex: 1;
-    }
-    .topic-name-text {
-      font-size: 15px;
-      font-weight: 600;
-    }
-    .topic-edit-input {
-      font-size: 15px;
-      font-weight: 600;
-      border: 1px solid var(--accent);
-      border-radius: 6px;
-      padding: 2px 8px;
-      outline: none;
-      font-family: var(--font);
-      display: none;
-    }
-    .topic-edit-input.visible { display: block; }
-
-    /* 주제 추가 버튼 */
-    #add-topic-area {
-      margin: 6px 10px 0;
-      display: flex;
-      gap: 8px;
-    }
-    #new-topic-input {
-      flex: 1;
-      height: 40px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 0 12px;
-      font-size: 14px;
-      font-family: var(--font);
-      outline: none;
-    }
-    #new-topic-input:focus { border-color: var(--accent); }
-    #add-topic-btn {
-      height: 40px;
-      padding: 0 16px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      font-size: 14px;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-    #add-topic-btn:hover { border-color: var(--accent); color: var(--accent); }
-
-    /* ── 상태 표시바 ── */
-    #status-bar {
-      font-size: 11px;
-      color: var(--text-sub);
-      text-align: center;
-      padding: 2px 14px;
-      min-height: 14px;
-    }
-    #status-bar.error { color: var(--danger); }
-
-    /* ── 모달 (이동 선택) ── */
-    #modal-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.45);
-      z-index: 200;
-      align-items: flex-end;
-    }
-    #modal-overlay.visible { display: flex; }
-    #modal-box {
-      width: 100%;
-      background: var(--surface);
-      border-radius: 16px 16px 0 0;
-      padding: 16px 0 30px;
-      max-height: 80vh;
-      overflow-y: auto;
-    }
-    .modal-title {
-      font-size: 15px;
-      font-weight: 600;
-      padding: 0 16px 12px;
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 6px;
-    }
-    .modal-option {
-      display: block;
-      width: 100%;
-      padding: 14px 16px;
-      text-align: left;
-      background: none;
-      border: none;
-      font-size: 15px;
-      cursor: pointer;
-      font-family: var(--font);
-    }
-    .modal-option:hover { background: var(--bg); }
-    .modal-option.cancel { color: var(--text-sub); }
-
-    /* ── 빈 상태 안내 ── */
-    .empty-hint {
-      padding: 20px 14px;
-      text-align: center;
-      color: var(--text-sub);
-      font-size: 14px;
-    }
-
-    /* ── 트리거 패널 ── */
-    #trigger-panel {
-      display: none;
-      margin-top: 8px;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 10px 12px;
-    }
-    #trigger-panel.visible { display: block; }
-    #trigger-text-display {
-      font-size: 12px;
-      font-family: monospace;
-      white-space: pre-wrap;
-      color: var(--text);
-      line-height: 1.5;
-      margin-bottom: 8px;
-      word-break: break-all;
-    }
-    #trigger-copy-btn {
-      width: 100%;
-      height: 34px;
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      border-radius: var(--radius);
-      font-size: 14px;
-      cursor: pointer;
-    }
-
-    /* ── 항목 메모 ── */
-    .item-note {
-      margin-bottom: 6px;
-      font-size: 13px;
-      color: var(--text-sub);
-      line-height: 1.5;
-      white-space: pre-wrap;
-      word-break: break-word;
-      background: var(--bg);
-      border-radius: 6px;
-      padding: 6px 8px;
-    }
-    .note-indicator { font-size: 11px; color: var(--text-sub); margin-left: 4px; }
-
-    /* ── 메모 입력 (입력 패널) ── */
-    #note-input {
-      width: 100%;
-      margin-top: 8px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 8px 14px;
-      font-size: 14px;
-      font-family: var(--font);
-      outline: none;
-      resize: none;
-      color: var(--text);
-      background: var(--bg);
-    }
-    #note-input:focus { border-color: var(--accent); }
-
-    /* ── 수정 모달 폼 ── */
-    .edit-form { padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
-    .edit-form input,
-    .edit-form textarea {
-      width: 100%;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 10px 12px;
-      font-size: 15px;
-      font-family: var(--font);
-      outline: none;
-    }
-    .edit-form input:focus,
-    .edit-form textarea:focus { border-color: var(--accent); }
-    .edit-form textarea { height: 90px; resize: vertical; }
-    .edit-form-actions { display: flex; gap: 8px; }
-    .edit-form-actions button {
-      flex: 1; height: 44px; border-radius: var(--radius);
-      font-size: 15px; font-weight: 600; cursor: pointer;
-    }
-    .edit-save-btn { background: var(--accent); color: #fff; border: none; }
-    .edit-cancel-btn { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
-
-    /* ── 탭 바 ── */
-    #tab-bar {
-      position: sticky; top: 0; z-index: 200;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      display: flex;
-    }
-    .tab-link {
-      flex: 1; padding: 10px 0; text-align: center;
-      font-size: 14px; font-weight: 600;
-      text-decoration: none; color: var(--text-sub);
-      border-bottom: 2px solid transparent;
-    }
-    .tab-link.active {
-      color: var(--accent);
-      border-bottom-color: var(--accent);
-    }
-    #last-processed {
-      font-size: 11px;
-      color: var(--text-sub);
-      text-align: center;
-      padding: 4px 0 2px;
-      background: var(--surface);
-    }
-  </style>
+  /* 프로젝트 트리 (Workflowy식) */
+  .tree-group { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; margin: 0 10px 6px; }
+  .tree-row { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-top: 1px solid var(--border); }
+  .tree-group > .tree-node:first-child > .tree-row { border-top: none; }
+  .tree-toggle { width: 16px; text-align: center; font-size: 10px; color: var(--text-sub); cursor: pointer; flex-shrink: 0; user-select: none; }
+  .tree-toggle.empty { cursor: default; color: #ccc; }
+  .tree-node .item-check { width: 20px; height: 20px; margin-top: 0; }
+  .tree-text { font-size: 15px; cursor: pointer; word-break: break-word; flex: 1; user-select: none; }
+  .tree-deadline { font-size: 11px; color: var(--accent); white-space: nowrap; }
+  .tree-child-count { font-size: 12px; color: var(--text-sub); }
+  .tree-node .item-panel { padding-bottom: 6px; }
+</style>
 </head>
 <body>
 
-<!-- ── 탭 바 ── -->
-<div id="tab-bar">
-  <a class="tab-link active" href="index.html">할 일</a>
-  <a class="tab-link" href="recurring.html">반복 업무</a>
-</div>
-<div id="last-processed"></div>
-
-<!-- ── 상단 고정 입력 패널 ── -->
-<div id="input-panel">
-  <input type="text" id="input-text" placeholder="메모를 입력하세요" autocomplete="off" />
-
-  <div class="toggle-row">
-    <button class="toggle-btn" id="date-toggle">날짜</button>
-    <input type="date" id="date-input" />
-    <button class="toggle-btn" id="important-toggle">중요</button>
-    <button class="toggle-btn" id="trigger-toggle" onclick="toggleTrigger()">트리거</button>
-  </div>
-
-  <div id="trigger-panel">
-    <div id="trigger-text-display"></div>
-    <button id="trigger-copy-btn" onclick="copyTrigger()">복사</button>
-  </div>
-
-  <!-- 중요 토글 켰을 때 등급 선택 -->
-  <div id="grade-row">
-    <button class="grade-btn" data-grade="S">🔴 S</button>
-    <button class="grade-btn" data-grade="A">🟠 A</button>
-    <button class="grade-btn" data-grade="B">🟡 B</button>
-    <button class="grade-btn" data-grade="C">⚪ C</button>
-  </div>
-
-  <textarea id="note-input" placeholder="메모 (선택)" rows="2"></textarea>
-  <button id="add-btn">추가</button>
+<div id="top-tab-bar">
+  <button class="top-tab active" data-tab="input" onclick="switchTopTab('input')">입력</button>
+  <button class="top-tab" data-tab="work" onclick="switchTopTab('work')">업무</button>
+  <button class="top-tab" data-tab="gtd" onclick="switchTopTab('gtd')">GTD</button>
 </div>
 
-<!-- 서버 동기화 상태 표시 -->
+<!-- ══════════ 입력 탭 ══════════ -->
+<div class="top-view active" id="view-input">
+  <div id="input-panel">
+    <input type="text" id="input-text" placeholder="할 일 입력" autocomplete="off" />
+    <textarea id="input-note" placeholder="메모 (선택)" rows="2"></textarea>
+    <div class="toggle-row">
+      <button class="toggle-btn" id="trigger-toggle" onclick="toggleTrigger()">트리거</button>
+    </div>
+    <div id="trigger-panel">
+      <div id="trigger-text-display"></div>
+      <button id="trigger-copy-btn" onclick="copyTrigger()">복사</button>
+    </div>
+    <button id="input-add-btn" onclick="addUnclassifiedItem()">추가</button>
+  </div>
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">분류 전</span>
+      <span class="section-count" id="count-unclassified"></span>
+    </div>
+    <ul class="item-list" id="list-unclassified"></ul>
+  </div>
+</div>
+
+<!-- ══════════ 업무 탭 ══════════ -->
+<div class="top-view" id="view-work">
+  <div class="section">
+    <div class="section-header"><span class="section-title">오늘업무</span><span class="section-count" id="count-work-today"></span></div>
+    <ul class="item-list" id="list-work-today"></ul>
+  </div>
+  <div class="section">
+    <div class="section-header"><span class="section-title">주간업무</span><span class="section-count" id="count-work-week"></span></div>
+    <ul class="item-list" id="list-work-week"></ul>
+  </div>
+</div>
+
+<!-- ══════════ GTD 탭 ══════════ -->
+<div class="top-view" id="view-gtd">
+  <div id="gtd-tab-bar">
+    <button class="gtd-tab active" data-gtab="recurring" onclick="switchGtdTab('recurring')">반복업무</button>
+    <button class="gtd-tab" data-gtab="next_action" onclick="switchGtdTab('next_action')">다음행동</button>
+    <button class="gtd-tab" data-gtab="project" onclick="switchGtdTab('project')">프로젝트</button>
+    <button class="gtd-tab" data-gtab="waiting" onclick="switchGtdTab('waiting')">대기중</button>
+    <button class="gtd-tab" data-gtab="calendar" onclick="switchGtdTab('calendar')">캘린더</button>
+    <button class="gtd-tab" data-gtab="someday" onclick="switchGtdTab('someday')">언젠가</button>
+    <button class="gtd-tab" data-gtab="memo" onclick="switchGtdTab('memo')">메모</button>
+  </div>
+
+  <!-- 반복업무 -->
+  <div class="gtd-view active" id="gtd-recurring">
+    <div class="section">
+      <div class="section-header" onclick="toggleAddRecurringForm()">
+        <span class="section-title">+ 반복업무 추가</span>
+      </div>
+      <div class="edit-form hidden-field" id="add-recurring-form">
+        <input type="text" id="rec-add-text" placeholder="할 일" />
+        <select id="rec-add-freq" onchange="onRecFreqChange()">
+          <option value="daily">매일</option>
+          <option value="weekly">매주</option>
+          <option value="biweekly">격주</option>
+          <option value="monthly">매월</option>
+        </select>
+        <select id="rec-add-dow">
+          <option value="0">일요일</option><option value="1">월요일</option><option value="2">화요일</option>
+          <option value="3">수요일</option><option value="4">목요일</option><option value="5">금요일</option><option value="6">토요일</option>
+        </select>
+        <select id="rec-add-dom" class="hidden-field">
+          <option value="0">말일</option>
+          <script>document.write(Array.from({length:31},(_,i)=>`<option value="${i+1}">${i+1}일</option>`).join(''))</script>
+        </select>
+        <div class="edit-form-actions">
+          <button class="edit-save-btn" onclick="addRecurringItem()">추가</button>
+          <button class="edit-cancel-btn" onclick="toggleAddRecurringForm()">취소</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header"><span class="section-title">활성 반복업무</span><span class="section-count" id="count-rec-active"></span></div>
+      <ul class="item-list" id="list-rec-active"></ul>
+    </div>
+
+    <div class="section">
+      <div class="section-header" onclick="toggleAddChecklistForm()"><span class="section-title">+ 업무세트(체크리스트) 추가</span></div>
+      <div class="edit-form hidden-field" id="add-checklist-form">
+        <input type="text" id="cs-add-title" placeholder="세트 이름 (예: 아침 루틴)" />
+        <textarea id="cs-add-items" placeholder="하위 항목을 줄바꿈으로 구분해서 입력"></textarea>
+        <div class="edit-form-actions">
+          <button class="edit-save-btn" onclick="addChecklistSet()">추가</button>
+          <button class="edit-cancel-btn" onclick="toggleAddChecklistForm()">취소</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header"><span class="section-title">업무세트 (매일 리셋)</span><span class="section-count" id="count-checklist"></span></div>
+      <div id="list-checklist"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-header"><span class="section-title">완료된 반복업무</span><span class="section-count" id="count-rec-done"></span></div>
+      <ul class="item-list" id="list-rec-done"></ul>
+    </div>
+  </div>
+
+  <!-- 다음행동 -->
+  <div class="gtd-view" id="gtd-next_action">
+    <div id="list-next_action"></div>
+  </div>
+
+  <!-- 프로젝트 -->
+  <div class="gtd-view" id="gtd-project">
+    <div class="section">
+      <div class="section-header" onclick="toggleAddProjectForm()"><span class="section-title">+ 프로젝트 추가</span></div>
+      <div class="edit-form hidden-field" id="add-project-form">
+        <input type="text" id="proj-add-text" placeholder="프로젝트 이름" />
+        <select id="proj-add-topic"><option value="">미분류</option></select>
+        <div class="edit-form-actions">
+          <button class="edit-save-btn" onclick="addProjectRoot()">추가</button>
+          <button class="edit-cancel-btn" onclick="toggleAddProjectForm()">취소</button>
+        </div>
+      </div>
+    </div>
+    <div id="list-project"></div>
+  </div>
+
+  <!-- 대기중 -->
+  <div class="gtd-view" id="gtd-waiting">
+    <div id="list-waiting"></div>
+  </div>
+
+  <!-- 캘린더 -->
+  <div class="gtd-view" id="gtd-calendar">
+    <div class="empty-hint" style="padding:14px 14px 4px">실시간 구글 캘린더 연동 대신, 채팅에서 "캘린더 확인해서 할일에 넣어줘"라고 요청하면 반영됨(수동)</div>
+    <div id="list-calendar"></div>
+  </div>
+
+  <!-- 언젠가 -->
+  <div class="gtd-view" id="gtd-someday">
+    <div id="list-someday"></div>
+  </div>
+
+  <!-- 메모 -->
+  <div class="gtd-view" id="gtd-memo">
+    <div id="list-memo"></div>
+  </div>
+</div>
+
 <div id="status-bar"></div>
 
-<!-- ── 중요 섹션 ── -->
-<div class="section" id="section-important" style="display:none">
-  <div class="section-header" data-target="list-important">
-    <span>
-      <span class="section-title">중요</span>
-      <span class="section-count" id="count-important"></span>
-    </span>
-    <span class="section-toggle-icon" id="icon-important">▼</span>
-  </div>
-  <ul class="item-list" id="list-important"></ul>
+<!-- 분류 모달 (입력 탭에서 미분류 항목 클릭 시) -->
+<div id="classify-modal-overlay">
 </div>
 
-<!-- ── 받은편지함 섹션 ── -->
-<div class="section" id="section-inbox">
-  <div class="section-header" data-target="list-inbox">
-    <span>
-      <span class="section-title">받은편지함</span>
-      <span class="section-count" id="count-inbox"></span>
-    </span>
-    <span class="section-toggle-icon" id="icon-inbox">▼</span>
-  </div>
-  <ul class="item-list" id="list-inbox"></ul>
-</div>
-
-<!-- ── 주제별 섹션 컨테이너 ── -->
-<div id="topics-container"></div>
-
-<!-- ── 주제 추가 ── -->
-<div id="add-topic-area">
-  <input type="text" id="new-topic-input" placeholder="새 주제명 입력" />
-  <button id="add-topic-btn">주제 추가</button>
-</div>
-
-<!-- ── 완료(보관) 섹션 — 기본 접힘, 7일 후 자동 정리 ── -->
-<div class="section" id="section-done" style="display:none">
-  <div class="section-header" data-target="list-done">
-    <span>
-      <span class="section-title">완료</span>
-      <span class="section-count" id="count-done"></span>
-    </span>
-    <span class="section-toggle-icon collapsed" id="icon-done">▼</span>
-  </div>
-  <ul class="item-list hidden" id="list-done"></ul>
-</div>
-
-<!-- ── 이동 선택 모달 ── -->
+<!-- 범용 편집 모달 -->
 <div id="modal-overlay">
   <div id="modal-box">
-    <div class="modal-title" id="modal-title">이동할 위치 선택</div>
-    <div id="modal-options"></div>
+    <div class="modal-title" id="modal-title">편집</div>
+    <div class="edit-form" id="modal-body"></div>
   </div>
 </div>
 
 <script>
-'use strict';
-
 /* ════════════════════════════════════════
    [설정 상수]
 ════════════════════════════════════════ */
 const GCP_READ_URL  = 'https://asia-northeast3-infin-stock-bot.cloudfunctions.net/todo-inbox-read';
 const GCP_WRITE_URL = 'https://asia-northeast3-infin-stock-bot.cloudfunctions.net/todo-inbox-write';
-const API_KEY       = 'tZrCvMfEa16iuQdFcnmGyDASHk9l5h3q0oK2xTbLY4wVWpjR';  // 봇 차단용 키 (서버 시크릿과 동일)
-
-const LS_KEY     = 'todo_inbox_data';  // localStorage 데이터 키
-const LS_DEL_KEY = 'todo_inbox_del';   // localStorage 미동기화 삭제목록 키
-
-/* 고정 트리거 문구 */
+const API_KEY        = 'tZrCvMfEa16iuQdFcnmGyDASHk9l5h3q0oK2xTbLY4wVWpjR';
+const LS_KEY          = 'todo_v2_data';
+const LS_DEL_KEY      = 'todo_v2_pending_del';
+const DAYS_KO = ['일','월','화','수','목','금','토'];
+const GTD_LABELS = { next_action: '다음행동', project: '프로젝트', waiting: '대기중', calendar: '캘린더', someday: '언젠가', memo: '메모' };
+const GRADE_EMOJI = { S: '🔴', A: '🟠', B: '🟡', C: '⚪' };
 const TRIGGER_TEXT = `받은편지함 확인해줘.
 
 [연결 정보]
@@ -599,59 +370,88 @@ const TRIGGER_TEXT = `받은편지함 확인해줘.
 API Key: tZrCvMfEa16iuQdFcnmGyDASHk9l5h3q0oK2xTbLY4wVWpjR
 
 [처리 지침]
-C:\\Users\\gjdnd\\OneDrive\\4. AI\\claude\\할 일 관리\\Claude처리지침_할일관리.md 파일을 읽고, 그 안의 "Claude 처리 절차"(1~6단계)를 따라 실행해줘. 마지막에 처리 요약 보고해줘.`;
+C:\\Users\\gjdnd\\OneDrive\\4. AI\\claude\\할 일 관리\\Claude처리지침_할일관리.md 파일을 읽고, 그 안의 "Claude 처리 절차"를 따라 실행해줘. 마지막에 처리 요약 보고해줘.`;
 
-/* 등급 이모지 매핑 */
-const GRADE_EMOJI = { S: '🔴', A: '🟠', B: '🟡', C: '⚪' };
-
-/* 등급 정렬 순서 (낮을수록 상위) */
-const GRADE_ORDER = { S: 0, A: 1, B: 2, C: 3, null: 4 };
+function toggleTrigger() {
+  const panel = document.getElementById('trigger-panel');
+  const visible = panel.classList.toggle('visible');
+  if (visible) document.getElementById('trigger-text-display').textContent = TRIGGER_TEXT;
+}
+function copyTrigger() {
+  navigator.clipboard.writeText(TRIGGER_TEXT).then(() => {
+    const btn = document.getElementById('trigger-copy-btn');
+    const orig = btn.textContent;
+    btn.textContent = '복사됨!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
+}
 
 /* ════════════════════════════════════════
-   [상태 관리]
+   [상태]
 ════════════════════════════════════════ */
-let state = {
-  items: [],
-  topics: [],
-  updated_at: null,
-  last_processed_at: null
-};
+let data = { items: [], topics: [], recurring: [], checklist_sets: [], updated_at: null, last_processed_at: null };
+let openPanels = {};
+let modalCtx = null;
+/* 서버에 아직 반영 안 된 삭제 목록 (index.html v1의 pendingDel과 동일한 원리) */
+let pendingDel = { items: [], recurring: [], checklist_sets: [] };
 
-/* 입력 UI 임시 상태 */
-let ui = {
-  dateOn: false,
-  importantOn: false,
-  selectedGrade: null
-};
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function genId() { return 'v2_' + Date.now() + '_' + Math.random().toString(36).slice(2,8); }
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 
-/* 아직 서버에 반영 안 된 삭제 목록 (완료/주제삭제).
-   서버 병합은 "요청에 없는 서버 항목 보존"이라, 삭제는 명시적으로 알려야 한다.
-   동기화 실패·새로고침에도 살아남도록 localStorage에 보관, 성공 시 비운다. */
-let pendingDel = { items: [], topics: [] };
-
+/* ── 로컬 저장 ── */
+function saveLocal() { localStorage.setItem(LS_KEY, JSON.stringify(data)); }
+function loadLocal() {
+  try { const raw = localStorage.getItem(LS_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
+}
 function loadPendingDel() {
   try {
     const raw = localStorage.getItem(LS_DEL_KEY);
     const d = raw ? JSON.parse(raw) : null;
-    if (d && Array.isArray(d.items) && Array.isArray(d.topics)) pendingDel = d;
+    if (d && Array.isArray(d.items) && Array.isArray(d.recurring) && Array.isArray(d.checklist_sets)) pendingDel = d;
   } catch { /* 무시 */ }
 }
-function savePendingDel() {
-  localStorage.setItem(LS_DEL_KEY, JSON.stringify(pendingDel));
-}
+function savePendingDel() { localStorage.setItem(LS_DEL_KEY, JSON.stringify(pendingDel)); }
+
+/* mutation 발생 시 공통으로 호출: 로컬 즉시 반영 + 백그라운드 서버 동기화 */
+function persist() { saveLocal(); saveToServer(); }
 
 /* ════════════════════════════════════════
-   [로컬 스토리지]
+   [마이그레이션] 기존(v1) 스키마 → v2 스키마
+   items에 gtd_category 키가 하나도 없으면(v1 데이터) 변환한다. 이미 v2면 그대로 통과(멱등).
 ════════════════════════════════════════ */
-function saveLocal() {
-  localStorage.setItem(LS_KEY, JSON.stringify(state));
+function isLegacySchema(serverData) {
+  const items = serverData.items || [];
+  if (!items.length) return false;
+  return items.every(i => !('gtd_category' in i));
 }
+function migrateLegacyItem(old, idx) {
+  let gtd_category, status;
+  if (old.status === 'inbox') { gtd_category = null; status = 'active'; }
+  else if (old.status === 'done') { gtd_category = 'next_action'; status = 'done'; }
+  else { gtd_category = 'next_action'; status = 'active'; }
 
-function loadLocal() {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
+  let deadline_type = null, deadline_value = null;
+  if (old.has_date && old.date) { deadline_type = 'exact'; deadline_value = old.date; }
+
+  return {
+    id: old.id, text: old.text, note: old.note || null,
+    gtd_category, topic: old.topic || null,
+    deadline_type, deadline_value,
+    parent_id: null, order: idx,
+    status,
+    waiting_on: null,
+    calendar_registered: !!old.calendar_registered,
+    important: !!old.important, grade: old.grade || null,
+    created_at: old.created_at || new Date().toISOString(),
+    completed_at: old.completed_at || null
+  };
 }
 
 /* ════════════════════════════════════════
@@ -660,761 +460,787 @@ function loadLocal() {
 async function loadFromServer() {
   setStatus('서버에서 불러오는 중...');
   try {
-    const res = await fetch(GCP_READ_URL, {
-      headers: { 'X-API-Key': API_KEY }
-    });
+    const res = await fetch(GCP_READ_URL, { headers: { 'X-API-Key': API_KEY } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const serverData = await res.json();
 
-    /* 아직 서버에 반영 안 된 삭제분을 미리 걸러낸다 (부활 방지) */
-    if (pendingDel.items.length || pendingDel.topics.length) {
-      const delItems  = new Set(pendingDel.items);
-      const delTopics = new Set(pendingDel.topics);
-      serverData.items = (serverData.items || []).filter(i => !delItems.has(i.id));
-      serverData.topics = (serverData.topics || []).filter(t => !delTopics.has(t.id));
-      /* 삭제된 주제에 매인 항목은 분류 전으로 복귀 */
-      serverData.items.forEach(i => {
-        if (delTopics.has(i.topic)) { i.topic = null; i.status = 'inbox'; }
-      });
+    let needsWriteBack = false;
+    if (isLegacySchema(serverData)) {
+      serverData.items = (serverData.items || []).map(migrateLegacyItem);
+      serverData.checklist_sets = serverData.checklist_sets || [];
+      needsWriteBack = true;
     }
 
-    /* localStorage 미동기화 항목 병합:
-       서버에 없는 로컬 항목은 서버보다 최신일 수 있음 */
+    /* 아직 서버에 반영 안 된 삭제분을 미리 걸러낸다 (부활 방지) */
+    const delItems = new Set(pendingDel.items);
+    const delRecurring = new Set(pendingDel.recurring);
+    const delChecklist = new Set(pendingDel.checklist_sets);
+    serverData.items = (serverData.items || []).filter(i => !delItems.has(i.id));
+    serverData.recurring = (serverData.recurring || []).filter(r => !delRecurring.has(r.id));
+    serverData.checklist_sets = (serverData.checklist_sets || []).filter(c => !delChecklist.has(c.id));
+
+    /* localStorage 미동기화 항목 병합 (서버에 없는 로컬 항목은 서버보다 최신일 수 있음) */
     const local = loadLocal();
     if (local && local.items) {
       const serverIds = new Set(serverData.items.map(i => i.id));
       const localOnly = local.items.filter(i => !serverIds.has(i.id));
       if (localOnly.length > 0) {
         serverData.items = [...serverData.items, ...localOnly];
-        serverData.updated_at = new Date().toISOString();
-        // 미동기화 항목이 있으면 서버에 다시 저장
-        await saveToServer(serverData, true);
-        return;
+        needsWriteBack = true;
       }
     }
 
-    state = serverData;
+    data = {
+      items: serverData.items || [], topics: serverData.topics || [],
+      recurring: serverData.recurring || [], checklist_sets: serverData.checklist_sets || [],
+      updated_at: serverData.updated_at || null, last_processed_at: serverData.last_processed_at || null
+    };
     saveLocal();
     renderAll();
-    purgeOldDone();   /* 서버 최신본 기준 7일 경과 완료항목 정리 */
-    setStatus('');
+    setStatus(needsWriteBack ? '마이그레이션 반영 중...' : '');
+    if (needsWriteBack) await saveToServer(true);
   } catch (err) {
-    /* 서버 실패 시 로컬 데이터로 폴백 */
     const local = loadLocal();
-    if (local) {
-      state = local;
-      renderAll();
-    }
+    if (local) { data = local; renderAll(); }
     setStatus('서버 연결 실패 — 로컬 데이터로 표시 중', true);
   }
 }
 
-/* silent=true 이면 상태바 업데이트 생략 (페이지 로드 병합 시 사용) */
-async function saveToServer(dataOverride, silent) {
-  const base = dataOverride || { ...state, updated_at: new Date().toISOString() };
-  /* 미동기화 삭제 목록을 함께 전송 (서버가 병합 결과에서 제거) */
-  const sentDel = { items: [...pendingDel.items], topics: [...pendingDel.topics] };
-  const payload = { ...base, deleted_ids: sentDel.items, deleted_topic_ids: sentDel.topics };
-
+async function saveToServer(silent) {
   if (!silent) setStatus('저장 중...');
   try {
     const res = await fetch(GCP_WRITE_URL, {
       method: 'POST',
-      headers: {
-        'X-API-Key': API_KEY,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
+      headers: { 'X-API-Key': API_KEY, 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({
+        items: data.items, topics: data.topics, recurring: data.recurring, checklist_sets: data.checklist_sets,
+        deleted_ids: pendingDel.items, deleted_topic_ids: [],
+        deleted_recurring_ids: pendingDel.recurring, deleted_checklist_set_ids: pendingDel.checklist_sets
+      })
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const result = await res.json();
-
-    /* 성공 → 전송한 삭제 id를 pending에서 제거 (그 사이 새로 쌓인 건 남김) */
-    pendingDel.items  = pendingDel.items.filter(id => !sentDel.items.includes(id));
-    pendingDel.topics = pendingDel.topics.filter(id => !sentDel.topics.includes(id));
+    pendingDel = { items: [], recurring: [], checklist_sets: [] };
     savePendingDel();
-
-    /* 서버가 병합 후 확정한 updated_at 반영 */
-    if (result.updated_at) {
-      state.updated_at = result.updated_at;
-      saveLocal();
-    }
     if (!silent) setStatus('');
-    if (dataOverride) {
-      state = base;
-      saveLocal();
-      renderAll();
-      setStatus('');
-    }
-  } catch {
-    /* 실패 시 pendingDel 유지 → 다음 동기화에서 재전송 */
-    if (!silent) setStatus('서버 저장 실패 — 로컬에는 저장됨', true);
+  } catch (err) {
+    setStatus('서버 저장 실패 — 로컬에는 반영됨, 재시도 필요', true);
   }
+}
+
+/* ════════════════════════════════════════
+   [초기화]
+════════════════════════════════════════ */
+async function init() {
+  loadPendingDel();
+  const local = loadLocal();
+  if (local) { data = local; renderAll(); }
+  await loadFromServer();
+}
+
+function setStatus(msg, isError) {
+  const el = document.getElementById('status-bar');
+  el.textContent = msg;
+  el.classList.toggle('error', !!isError);
+}
+
+/* ════════════════════════════════════════
+   [탭 전환]
+════════════════════════════════════════ */
+function switchTopTab(name) {
+  document.querySelectorAll('.top-tab').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.top-view').forEach(el => el.classList.remove('active'));
+  const btn = document.querySelector(`.top-tab[data-tab="${name}"]`);
+  if (btn) btn.classList.add('active');
+  document.getElementById('view-' + name).classList.add('active');
+}
+function switchGtdTab(name) {
+  document.querySelectorAll('.gtd-tab').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.gtd-view').forEach(el => el.classList.remove('active'));
+  const btn = document.querySelector(`.gtd-tab[data-gtab="${name}"]`);
+  if (btn) btn.classList.add('active');
+  document.getElementById('gtd-' + name).classList.add('active');
+}
+function togglePanel(id) {
+  openPanels[id] = !openPanels[id];
+  const el = document.getElementById('panel-' + id);
+  if (el) el.classList.toggle('visible', !!openPanels[id]);
 }
 
 /* ════════════════════════════════════════
    [렌더링]
 ════════════════════════════════════════ */
+function topicName(id) {
+  const t = data.topics.find(x => x.id === id);
+  return t ? t.name : '미분류';
+}
+
 function renderAll() {
-  renderImportant();
-  renderInbox();
-  renderTopics();
-  renderDone();
-  renderLastProcessed();
+  renderUnclassified();
+  ['next_action','waiting','calendar','someday','memo'].forEach(renderGtdFlatList);
+  renderProjectTree();
+  renderRecurring();
+  renderChecklistSets();
+  renderWorkTab();
 }
 
-/* 받은편지함 자동 정리(Routine) 마지막 실행 시각 표시 */
-function renderLastProcessed() {
-  const el = document.getElementById('last-processed');
-  if (!state.last_processed_at) {
-    el.textContent = '';
-    return;
-  }
-  const d = new Date(state.last_processed_at);
-  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
-  const mm = String(kst.getUTCMonth() + 1).padStart(2, '0');
-  const dd = String(kst.getUTCDate()).padStart(2, '0');
-  const hh = String(kst.getUTCHours()).padStart(2, '0');
-  const mi = String(kst.getUTCMinutes()).padStart(2, '0');
-  el.textContent = `마지막 정리: ${mm}/${dd} ${hh}:${mi}`;
+/* ── 입력 탭: 분류 전 목록 ── */
+function renderUnclassified() {
+  const items = data.items.filter(i => i.gtd_category == null && i.status !== 'done');
+  document.getElementById('count-unclassified').textContent = items.length ? `(${items.length})` : '';
+  const list = document.getElementById('list-unclassified');
+  if (!items.length) { list.innerHTML = '<div class="empty-hint">분류할 항목이 없습니다</div>'; return; }
+  list.innerHTML = items.map(i => `
+    <li class="item" id="item-${i.id}">
+      <div class="item-body">
+        <div class="item-text" onclick="openClassifyModal('${i.id}')">${escapeHtml(i.text)}</div>
+        ${i.note ? `<div class="item-meta">${escapeHtml(i.note)}</div>` : ''}
+      </div>
+    </li>`).join('');
 }
 
-/* 중요 섹션: important=true 이고 아직 완료 안 된 항목, 등급순 S→A→B→C */
-function renderImportant() {
-  const items = state.items
-    .filter(i => i.important && i.status !== 'done')
-    .sort((a, b) => GRADE_ORDER[a.grade] - GRADE_ORDER[b.grade]);
-
-  const section = document.getElementById('section-important');
-  const list    = document.getElementById('list-important');
-  const count   = document.getElementById('count-important');
-
-  if (items.length === 0) {
-    section.style.display = 'none';
-    return;
-  }
-  section.style.display = '';
-  count.textContent = `(${items.length})`;
-  list.innerHTML = items.map(i => itemHTML(i, 'important')).join('');
+function addUnclassifiedItem() {
+  const textEl = document.getElementById('input-text');
+  const noteEl = document.getElementById('input-note');
+  const text = textEl.value.trim();
+  if (!text) { textEl.focus(); return; }
+  data.items.push({
+    id: genId(), text, note: noteEl.value.trim() || null,
+    gtd_category: null, topic: null,
+    deadline_type: null, deadline_value: null,
+    parent_id: null, order: data.items.length,
+    status: 'active', waiting_on: null, calendar_registered: false,
+    important: false, grade: null,
+    created_at: new Date().toISOString(), completed_at: null
+  });
+  textEl.value = ''; noteEl.value = '';
+  persist(); renderAll();
 }
 
-/* 받은편지함 섹션: status=inbox 이고 important=false */
-function renderInbox() {
-  const items = state.items.filter(i => i.status === 'inbox' && !i.important);
-  const list  = document.getElementById('list-inbox');
-  const count = document.getElementById('count-inbox');
-
-  count.textContent = `(${items.length})`;
-  list.innerHTML = items.length
-    ? items.map(i => itemHTML(i, 'inbox')).join('')
-    : '<li class="empty-hint">메모가 없습니다</li>';
+/* ── 분류 모달 (GTD 카테고리 + 주제 지정) ── */
+function openClassifyModal(id) {
+  const item = data.items.find(i => i.id === id);
+  if (!item) return;
+  modalCtx = { type: 'classify', id };
+  document.getElementById('modal-title').textContent = '분류: ' + item.text;
+  const topicOptions = data.topics.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+  document.getElementById('modal-body').innerHTML = `
+    <div class="field-label">GTD 카테고리</div>
+    <select id="classify-category">
+      <option value="next_action">다음행동</option>
+      <option value="project">프로젝트</option>
+      <option value="waiting">대기중</option>
+      <option value="calendar">캘린더</option>
+      <option value="someday">언젠가</option>
+      <option value="memo">메모</option>
+    </select>
+    <div class="field-label">주제</div>
+    <select id="classify-topic">
+      <option value="">미분류</option>
+      ${topicOptions}
+    </select>
+    <div class="edit-form-actions">
+      <button class="edit-save-btn" onclick="saveClassify()">분류</button>
+      <button class="edit-cancel-btn" onclick="closeModal()">취소</button>
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('visible');
+}
+function saveClassify() {
+  const item = data.items.find(i => i.id === modalCtx.id);
+  if (!item) return;
+  item.gtd_category = document.getElementById('classify-category').value;
+  item.topic = document.getElementById('classify-topic').value || null;
+  closeModal(); persist(); renderAll();
+}
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('visible');
+  modalCtx = null;
 }
 
-/* 주제별 섹션 렌더링 */
-function renderTopics() {
-  const container = document.getElementById('topics-container');
-  /* order 기준 정렬 */
-  const topics = [...state.topics].sort((a, b) => a.order - b.order);
+/* ── GTD 플랫 리스트 섹션 (다음행동/프로젝트/대기중/언젠가/메모) ── */
+function renderGtdFlatList(category) {
+  const container = document.getElementById('list-' + category);
+  if (!container) return;
+  let items = data.items.filter(i => i.gtd_category === category && i.status !== 'done');
+  if (category === 'next_action') items = items.filter(i => i.parent_id == null);
 
-  container.innerHTML = topics.map(topic => {
-    const items = state.items.filter(i => i.topic === topic.id && i.status !== 'done');
-    return topicSectionHTML(topic, items);
-  }).join('');
+  if (!items.length) { container.innerHTML = `<div class="empty-hint">${GTD_LABELS[category]} 항목 없음</div>`; return; }
+
+  const grouped = {};
+  items.forEach(i => {
+    const key = i.topic || '__none__';
+    (grouped[key] = grouped[key] || []).push(i);
+  });
+
+  let html = '';
+  Object.keys(grouped).forEach(key => {
+    const label = key === '__none__' ? '미분류' : topicName(key);
+    html += `<div class="topic-group-title">${escapeHtml(label)}</div>`;
+    html += `<ul class="item-list">` + grouped[key].map(i => buildGtdItemHtml(i, category)).join('') + `</ul>`;
+  });
+  container.innerHTML = html;
 }
 
-/* 완료(보관) 섹션: status='done', 최근 완료순. 기본 접힘. */
-function renderDone() {
-  const items = state.items
-    .filter(i => i.status === 'done')
-    .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at));
-
-  const section = document.getElementById('section-done');
-  const list    = document.getElementById('list-done');
-  const count   = document.getElementById('count-done');
-
-  if (items.length === 0) {
-    section.style.display = 'none';
-    return;
-  }
-  section.style.display = '';
-  count.textContent = `(${items.length})`;
-  list.innerHTML = items.map(i => itemHTML(i, 'done')).join('');
-}
-
-/* 개별 항목 HTML */
-function itemHTML(item, context) {
-  const badge = item.important && item.grade
-    ? `<span class="grade-badge">${GRADE_EMOJI[item.grade]}${item.grade}</span>`
-    : '';
-
-  /* 완료(보관) 항목: 체크 대신 "되돌리기", 완료일 표시 */
-  if (context === 'done') {
-    const doneMeta = item.completed_at
-      ? `<span class="item-meta">완료 ${item.completed_at.slice(0, 10)}</span>`
-      : '';
-    const noteIcon = item.note ? '<span class="note-indicator">📝</span>' : '';
-    const noteHtml = item.note ? `<div class="item-note">${escapeHtml(item.note)}</div>` : '';
-    return `
-      <li class="item item-done" id="item-${item.id}">
-        ${badge}
-        <div class="item-body">
-          <div class="item-text" onclick="toggleItemPanel('${item.id}')">${escapeHtml(item.text)}${noteIcon}</div>
-          ${doneMeta}
-          <div class="item-panel" id="panel-${item.id}">
-            ${noteHtml}
-            <div class="item-actions">
-              <button class="action-btn" onclick="restoreItem('${item.id}')">되돌리기</button>
-              <button class="action-btn danger" onclick="deleteItem('${item.id}')">삭제</button>
-            </div>
-          </div>
-        </div>
-      </li>`;
-  }
-
-  const dateMeta = item.has_date && item.date
-    ? `<span class="item-meta">${item.date}</span>`
-    : '';
-
-  /* 이동 버튼:
-     - 중요 섹션은 등급순 자동 정렬이라 "위로"가 의미 없으므로 숨긴다.
-     - "이동"(주제 이동)은 모든 컨텍스트에서 제공. */
-  const moveTopBtn = context === 'important'
-    ? ''
-    : `<button class="action-btn" onclick="moveToTop('${item.id}')">위로</button>`;
-  const moveBtn     = `<button class="action-btn" onclick="openMoveModal('${item.id}')">이동</button>`;
-
-  const noteIcon = item.note ? '<span class="note-indicator">📝</span>' : '';
-  const noteHtml = item.note ? `<div class="item-note">${escapeHtml(item.note)}</div>` : '';
+function buildGtdItemHtml(i, category) {
+  const panelVisible = openPanels[i.id] ? 'visible' : '';
+  const badge = i.important ? `<span class="grade-badge">${GRADE_EMOJI[i.grade] || '❗'}</span>` : '';
+  const waitingStr = category === 'waiting' && i.waiting_on ? `<div class="item-meta">대기: ${escapeHtml(i.waiting_on)}</div>` : '';
+  const deadlineStr = i.deadline_type === 'exact' ? `<div class="item-meta">기한: ${i.deadline_value}</div>`
+    : i.deadline_type === 'month' ? `<div class="item-meta">기한: ${i.deadline_value} 중</div>`
+    : i.deadline_type === 'undecided' ? `<div class="item-meta">기한: 미정</div>` : '';
+  const checkOnclick = category === 'memo' ? '' : `onclick="completeGtdItem('${i.id}')"`;
 
   return `
-    <li class="item" id="item-${item.id}">
-      <span class="item-check" onclick="completeItem('${item.id}')"></span>
+    <li class="item" id="item-${i.id}">
+      ${category === 'memo' ? '' : `<div class="item-check" ${checkOnclick}></div>`}
       ${badge}
       <div class="item-body">
-        <div class="item-text" onclick="toggleItemPanel('${item.id}')">${escapeHtml(item.text)}${noteIcon}</div>
-        ${dateMeta}
-        <div class="item-panel" id="panel-${item.id}">
-          ${noteHtml}
+        <div class="item-text" onclick="togglePanel('${i.id}')">${escapeHtml(i.text)}</div>
+        ${i.note ? `<div class="item-meta">${escapeHtml(i.note)}</div>` : ''}
+        ${waitingStr}${deadlineStr}
+        <div class="item-panel" id="panel-${i.id}">
           <div class="item-actions">
-            ${moveTopBtn}
-            ${moveBtn}
-            <button class="action-btn" onclick="openEditModal('${item.id}')">수정</button>
-            <button class="action-btn danger" onclick="deleteItem('${item.id}')">삭제</button>
+            <button class="action-btn" onclick="openEditGtdItem('${i.id}')">수정</button>
+            <button class="action-btn danger" onclick="deleteGtdItem('${i.id}')">삭제</button>
           </div>
         </div>
       </div>
     </li>`;
 }
 
-/* 주제 섹션 HTML (헤더 + 항목 목록) */
-function topicSectionHTML(topic, items) {
-  const itemsHtml = items.length
-    ? items.map(i => itemHTML(i, 'topic')).join('')
-    : '<li class="empty-hint">항목 없음</li>';
-
-  return `
-    <div class="section" id="section-topic-${topic.id}">
-      <div class="topic-header-row">
-        <div class="topic-name-wrap" onclick="toggleSection('list-topic-${topic.id}', 'icon-topic-${topic.id}')">
-          <span class="topic-name-text" id="topic-name-${topic.id}">${escapeHtml(topic.name)}</span>
-          <input class="topic-edit-input" id="topic-edit-${topic.id}"
-            value="${escapeHtml(topic.name)}"
-            onkeydown="handleTopicEditKey(event, '${topic.id}')"
-            onblur="saveTopicName('${topic.id}')"
-          />
-          <span class="section-count">(${items.length})</span>
-        </div>
-        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
-          <button class="action-btn" onclick="startEditTopic('${topic.id}')">수정</button>
-          <button class="action-btn danger" onclick="deleteTopic('${topic.id}')">삭제</button>
-          <span class="section-toggle-icon" id="icon-topic-${topic.id}">▼</span>
-        </div>
-      </div>
-      <ul class="item-list" id="list-topic-${topic.id}">${itemsHtml}</ul>
-    </div>`;
-}
-
-/* ── 섹션 열고 닫기 ── */
-function toggleSection(listId, iconId) {
-  const list = document.getElementById(listId);
-  const icon = document.getElementById(iconId);
-  if (!list) return;
-  const collapsed = list.classList.toggle('hidden');
-  if (icon) icon.classList.toggle('collapsed', collapsed);
-}
-
-/* ── 섹션 헤더 클릭 이벤트 위임 ── */
-document.addEventListener('click', e => {
-  const header = e.target.closest('.section-header[data-target]');
-  if (!header) return;
-  const targetId = header.dataset.target;
-  const iconEl   = header.querySelector('.section-toggle-icon');
-  const list     = document.getElementById(targetId);
-  if (!list) return;
-  const collapsed = list.classList.toggle('hidden');
-  if (iconEl) iconEl.classList.toggle('collapsed', collapsed);
-});
-
-/* ════════════════════════════════════════
-   [입력 UI 이벤트]
-════════════════════════════════════════ */
-
-/* 날짜 토글 */
-document.getElementById('date-toggle').addEventListener('click', () => {
-  ui.dateOn = !ui.dateOn;
-  document.getElementById('date-toggle').classList.toggle('active', ui.dateOn);
-  document.getElementById('date-input').classList.toggle('visible', ui.dateOn);
-  /* 기본값: 오늘 날짜 */
-  if (ui.dateOn && !document.getElementById('date-input').value) {
-    document.getElementById('date-input').value = todayStr();
-  }
-});
-
-/* 중요 토글 */
-document.getElementById('important-toggle').addEventListener('click', () => {
-  ui.importantOn = !ui.importantOn;
-  document.getElementById('important-toggle').classList.toggle('active', ui.importantOn);
-  document.getElementById('grade-row').classList.toggle('visible', ui.importantOn);
-  if (!ui.importantOn) {
-    ui.selectedGrade = null;
-    document.querySelectorAll('.grade-btn').forEach(b => b.classList.remove('selected'));
-  }
-});
-
-/* 등급 선택 */
-document.querySelectorAll('.grade-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    ui.selectedGrade = btn.dataset.grade;
-    document.querySelectorAll('.grade-btn').forEach(b => b.classList.remove('selected'));
-    btn.classList.add('selected');
-  });
-});
-
-/* Enter 키로 추가 */
-document.getElementById('input-text').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    addItem();
-  }
-});
-
-/* 추가 버튼 */
-document.getElementById('add-btn').addEventListener('click', addItem);
-
-/* ════════════════════════════════════════
-   [항목 추가 — Optimistic UI]
-════════════════════════════════════════ */
-function addItem() {
-  const textEl = document.getElementById('input-text');
-  const text   = textEl.value.trim();
-  if (!text) {
-    textEl.focus();
-    return;
-  }
-
-  const now = new Date().toISOString();
-  const dateVal = ui.dateOn ? document.getElementById('date-input').value : null;
-  const noteVal = document.getElementById('note-input').value.trim();
-
-  /* 중요 항목이면 status = inbox 에서 시작하되 important=true 로 중요 섹션에 표시됨 */
-  const newItem = {
-    id: crypto.randomUUID(),
-    text,
-    note: noteVal || null,
-    created_at: now,
-    important: ui.importantOn,
-    grade: ui.importantOn ? (ui.selectedGrade || 'C') : null,  // 등급 미선택 시 C 기본
-    has_date: ui.dateOn,
-    date: dateVal,
-    topic: null,
-    calendar_registered: false,
-    status: 'inbox',
-    completed_at: null      // 완료(휴지통) 시각. status='done'일 때만 채워짐
-  };
-
-  /* 1. 즉시 state 반영 + 렌더 (Optimistic UI 핵심) */
-  state.items.unshift(newItem);
-  renderAll();
-
-  /* 2. localStorage 저장 */
-  saveLocal();
-
-  /* 3. 입력창 초기화 */
-  textEl.value = '';
-  resetInputUI();
-  textEl.focus();
-
-  /* 4. 백그라운드 서버 동기화 */
-  saveToServer();
-}
-
-/* 입력 UI 상태 초기화 */
-function resetInputUI() {
-  ui.dateOn = false;
-  ui.importantOn = false;
-  ui.selectedGrade = null;
-  document.getElementById('date-toggle').classList.remove('active');
-  document.getElementById('important-toggle').classList.remove('active');
-  document.getElementById('date-input').classList.remove('visible');
-  document.getElementById('date-input').value = '';
-  document.getElementById('grade-row').classList.remove('visible');
-  document.querySelectorAll('.grade-btn').forEach(b => b.classList.remove('selected'));
-  document.getElementById('note-input').value = '';
-}
-
-/* ════════════════════════════════════════
-   [완료 처리 — 소프트 삭제(휴지통)]
-   즉시 지우지 않고 status='done'으로 옮긴다.
-   7일 뒤 앱 로드 시 자동 정리(purgeOldDone)된다. 실수 복구 가능.
-════════════════════════════════════════ */
-const DONE_KEEP_DAYS = 7;  // 완료 보관 일수
-
-function completeItem(id) {
-  /* 체크 애니메이션을 위해 잠깐 표시 후 done 처리 */
-  const el = document.getElementById(`item-${id}`);
-  const apply = () => {
-    const item = state.items.find(i => i.id === id);
-    if (!item) return;
-    item.status = 'done';
-    item.completed_at = new Date().toISOString();
-    saveLocal();
-    renderAll();
-    saveToServer();
-  };
-  if (el) {
-    el.querySelector('.item-check').classList.add('done');
-    setTimeout(apply, 300);
-  } else {
-    apply();
-  }
-}
-
-/* 완료 항목 되돌리기: topic이 남아 있으면 주제로, 아니면 받은편지함으로 */
-function restoreItem(id) {
-  const item = state.items.find(i => i.id === id);
+function completeGtdItem(id) {
+  const item = data.items.find(i => i.id === id);
   if (!item) return;
-  item.status = item.topic ? 'topic' : 'inbox';
-  item.completed_at = null;
-  saveLocal();
-  renderAll();
-  saveToServer();
+  item.status = 'done'; item.completed_at = new Date().toISOString();
+  persist(); renderAll();
 }
-
-/* 트리거 패널 펼치기/닫기 */
-function toggleTrigger() {
-  const panel  = document.getElementById('trigger-panel');
-  const btn    = document.getElementById('trigger-toggle');
-  const isOpen = panel.classList.toggle('visible');
-  btn.classList.toggle('active', isOpen);
-  if (isOpen) {
-    document.getElementById('trigger-text-display').textContent = TRIGGER_TEXT;
-  }
-}
-
-/* 트리거 문구 클립보드 복사 */
-function copyTrigger() {
-  const copyBtn = document.getElementById('trigger-copy-btn');
-  navigator.clipboard.writeText(TRIGGER_TEXT).then(() => {
-    copyBtn.textContent = '복사됨 ✓';
-    setTimeout(() => { copyBtn.textContent = '복사'; }, 1500);
-  }).catch(() => {
-    copyBtn.textContent = '복사 실패';
-    setTimeout(() => { copyBtn.textContent = '복사'; }, 1500);
-  });
-}
-
-/* 항목 패널(메모+버튼) 펼치기/닫기 */
-function toggleItemPanel(id) {
-  const panel = document.getElementById(`panel-${id}`);
-  if (panel) panel.classList.toggle('visible');
-}
-
-/* 수정 모달 열기 */
-function openEditModal(id) {
-  const item = state.items.find(i => i.id === id);
-  if (!item) return;
-
-  document.getElementById('modal-title').textContent = '수정';
-  document.getElementById('modal-options').innerHTML = `
-    <div class="edit-form">
-      <input type="text" id="edit-text-input" value="${escapeHtml(item.text)}" placeholder="할 일" />
-      <textarea id="edit-note-input" placeholder="메모 (선택)">${escapeHtml(item.note || '')}</textarea>
-      <div class="edit-form-actions">
-        <button class="edit-cancel-btn" onclick="closeModal()">취소</button>
-        <button class="edit-save-btn" onclick="saveEdit('${id}')">저장</button>
-      </div>
-    </div>`;
-
-  document.getElementById('modal-overlay').classList.add('visible');
-  document.getElementById('edit-text-input').focus();
-}
-
-/* 수정 저장 */
-function saveEdit(id) {
-  const item    = state.items.find(i => i.id === id);
-  const textEl  = document.getElementById('edit-text-input');
-  const noteEl  = document.getElementById('edit-note-input');
-  if (!item || !textEl) return;
-
-  const newText = textEl.value.trim();
-  if (!newText) return;
-
-  item.text = newText;
-  item.note = noteEl ? (noteEl.value.trim() || null) : item.note;
-
-  closeModal();
-  saveLocal();
-  renderAll();
-  saveToServer();
-}
-
-/* 완료 섹션에서 즉시 영구 삭제 */
-function deleteItem(id) {
-  state.items = state.items.filter(i => i.id !== id);
+function deleteGtdItem(id) {
+  if (!confirm('삭제할까요?')) return;
+  data.items = data.items.filter(i => i.id !== id);
   if (!pendingDel.items.includes(id)) pendingDel.items.push(id);
   savePendingDel();
-  saveLocal();
-  renderAll();
-  saveToServer();
-}
-
-/* 7일 지난 완료 항목 자동 정리 (실제 삭제 — 기존 삭제목록 메커니즘 재사용) */
-function purgeOldDone() {
-  const cutoff = Date.now() - DONE_KEEP_DAYS * 24 * 60 * 60 * 1000;
-  const expired = state.items.filter(i =>
-    i.status === 'done' && i.completed_at && new Date(i.completed_at).getTime() < cutoff
-  );
-  if (expired.length === 0) return;
-
-  const expiredIds = new Set(expired.map(i => i.id));
-  state.items = state.items.filter(i => !expiredIds.has(i.id));
-  expired.forEach(i => {
-    if (!pendingDel.items.includes(i.id)) pendingDel.items.push(i.id);
-  });
-  savePendingDel();
-  saveLocal();
-  saveToServer();
+  persist(); renderAll();
 }
 
 /* ════════════════════════════════════════
-   [항목 이동]
+   [프로젝트 트리 - Workflowy식, 무제한 깊이]
 ════════════════════════════════════════ */
-
-/* 같은 그룹 내 최상단으로 이동.
-   "위로"는 받은편지함·주제 컨텍스트에서만 호출된다(중요 섹션은 등급순 자동정렬). */
-function moveToTop(id) {
-  const idx = state.items.findIndex(i => i.id === id);
-  if (idx <= 0) return;
-  const [item] = state.items.splice(idx, 1);
-
-  /* 같은 그룹 판정:
-     - 주제 항목: 같은 topic + status==='topic'
-     - 받은편지함 항목: status==='inbox' && 중요 아님 */
-  const inSameGroup = (i) =>
-    item.status === 'topic'
-      ? (i.status === 'topic' && i.topic === item.topic)
-      : (i.status === 'inbox' && !i.important);
-
-  const firstIdx = state.items.findIndex(inSameGroup);
-  state.items.splice(firstIdx === -1 ? 0 : firstIdx, 0, item);
-
-  saveLocal();
-  renderAll();
-  saveToServer();
+/* 활성 하위작업(정렬됨) */
+function getChildren(parentId) {
+  return data.items
+    .filter(i => i.parent_id === parentId && i.status !== 'done')
+    .sort((a,b) => (a.order||0) - (b.order||0));
+}
+/* 모든 하위(상태 무관, 재귀) — 완료/삭제 전파용 */
+function getAllDescendants(id) {
+  let result = [];
+  data.items.filter(i => i.parent_id === id).forEach(child => {
+    result.push(child);
+    result = result.concat(getAllDescendants(child.id));
+  });
+  return result;
+}
+/* 순서 이동 대상 형제 목록 */
+function getSiblings(node) {
+  return data.items.filter(i =>
+    i.parent_id === node.parent_id &&
+    i.status !== 'done' &&
+    (node.parent_id !== null || (i.gtd_category === 'project' && i.topic === node.topic))
+  ).sort((a,b) => (a.order||0) - (b.order||0));
 }
 
-/* 이동 모달 열기 */
-let _moveTargetId = null;
+function toggleAddProjectForm() {
+  document.getElementById('add-project-form').classList.toggle('hidden-field');
+}
+function refreshProjectTopicSelect() {
+  const sel = document.getElementById('proj-add-topic');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">미분류</option>' +
+    data.topics.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+  sel.value = cur;
+}
+function addProjectRoot() {
+  const textEl = document.getElementById('proj-add-text');
+  const text = textEl.value.trim();
+  if (!text) { textEl.focus(); return; }
+  const topic = document.getElementById('proj-add-topic').value || null;
+  const roots = data.items.filter(i => i.gtd_category === 'project' && i.parent_id == null);
+  const maxOrder = roots.reduce((m,s) => Math.max(m, s.order||0), -1);
+  data.items.push({
+    id: genId(), text, note: null,
+    gtd_category: 'project', topic,
+    deadline_type: null, deadline_value: null,
+    parent_id: null, order: maxOrder+1,
+    status: 'active', waiting_on: null, calendar_registered: false,
+    important: false, grade: null, collapsed: false,
+    created_at: new Date().toISOString(), completed_at: null
+  });
+  textEl.value = '';
+  persist(); renderAll();
+}
 
-function openMoveModal(id) {
-  _moveTargetId = id;
-  const item = state.items.find(i => i.id === id);
-  if (!item) return;
+function openAddSubTask(parentId) {
+  const parent = data.items.find(i => i.id === parentId);
+  if (!parent) return;
+  modalCtx = { type: 'add_subtask', parentId };
+  document.getElementById('modal-title').textContent = '하위작업 추가: ' + parent.text;
+  document.getElementById('modal-body').innerHTML = `
+    <input type="text" id="subtask-text" placeholder="하위작업 내용" />
+    <div class="edit-form-actions">
+      <button class="edit-save-btn" onclick="saveSubTask()">추가</button>
+      <button class="edit-cancel-btn" onclick="closeModal()">취소</button>
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('visible');
+  setTimeout(() => { const el = document.getElementById('subtask-text'); if (el) el.focus(); }, 50);
+}
+function saveSubTask() {
+  const parent = data.items.find(i => i.id === modalCtx.parentId);
+  if (!parent) return;
+  const text = document.getElementById('subtask-text').value.trim();
+  if (!text) return;
+  const siblings = getChildren(modalCtx.parentId);
+  const maxOrder = siblings.reduce((m,s) => Math.max(m, s.order||0), -1);
+  data.items.push({
+    id: genId(), text, note: null,
+    gtd_category: 'project', topic: parent.topic,
+    deadline_type: null, deadline_value: null,
+    parent_id: modalCtx.parentId, order: maxOrder+1,
+    status: 'active', waiting_on: null, calendar_registered: false,
+    important: false, grade: null, collapsed: false,
+    created_at: new Date().toISOString(), completed_at: null
+  });
+  parent.collapsed = false; // 추가 시 펼쳐 보이도록
+  closeModal(); persist(); renderAll();
+}
 
-  const title   = document.getElementById('modal-title');
-  const options = document.getElementById('modal-options');
-  title.textContent = `"${item.text.substring(0,20)}${item.text.length > 20 ? '…' : ''}" 이동`;
+function completeProjectNode(id) {
+  const node = data.items.find(i => i.id === id);
+  if (!node) return;
+  const activeDesc = getAllDescendants(id).filter(d => d.status !== 'done');
+  if (activeDesc.length && !confirm(`하위 ${activeDesc.length}개 항목도 함께 완료됩니다. 계속할까요?`)) return;
+  const now = new Date().toISOString();
+  node.status = 'done'; node.completed_at = now;
+  activeDesc.forEach(d => { d.status = 'done'; d.completed_at = now; });
+  persist(); renderAll();
+}
+function deleteProjectNode(id) {
+  const desc = getAllDescendants(id);
+  const msg = desc.length ? `이 항목과 하위 ${desc.length}개를 모두 삭제할까요?` : '삭제할까요?';
+  if (!confirm(msg)) return;
+  const ids = new Set([id, ...desc.map(d => d.id)]);
+  data.items = data.items.filter(i => !ids.has(i.id));
+  ids.forEach(delId => { if (!pendingDel.items.includes(delId)) pendingDel.items.push(delId); });
+  savePendingDel();
+  persist(); renderAll();
+}
+function moveProjectNode(id, dir) {
+  const node = data.items.find(i => i.id === id);
+  if (!node) return;
+  const siblings = getSiblings(node);
+  const idx = siblings.findIndex(s => s.id === id);
+  const swapIdx = idx + dir;
+  if (swapIdx < 0 || swapIdx >= siblings.length) return;
+  const other = siblings[swapIdx];
+  const tmp = node.order; node.order = other.order; other.order = tmp;
+  persist(); renderAll();
+}
+function toggleProjectCollapse(id) {
+  const node = data.items.find(i => i.id === id);
+  if (!node) return;
+  node.collapsed = !node.collapsed;
+  persist(); renderProjectTree();
+}
 
+function renderProjectTree() {
+  refreshProjectTopicSelect();
+  const container = document.getElementById('list-project');
+  if (!container) return;
+  const roots = data.items.filter(i => i.gtd_category === 'project' && i.parent_id == null && i.status !== 'done');
+  if (!roots.length) { container.innerHTML = '<div class="empty-hint">프로젝트 없음</div>'; return; }
+  const grouped = {};
+  roots.forEach(i => { const key = i.topic || '__none__'; (grouped[key] = grouped[key] || []).push(i); });
   let html = '';
+  Object.keys(grouped).forEach(key => {
+    const label = key === '__none__' ? '미분류' : topicName(key);
+    html += `<div class="topic-group-title">${escapeHtml(label)}</div>`;
+    const sorted = grouped[key].sort((a,b) => (a.order||0) - (b.order||0));
+    html += `<div class="tree-group">` + sorted.map(r => buildProjectNodeHtml(r, 0)).join('') + `</div>`;
+  });
+  container.innerHTML = html;
+}
+function buildProjectNodeHtml(node, depth) {
+  const children = getChildren(node.id);
+  const hasChildren = children.length > 0;
+  const collapsed = !!node.collapsed;
+  const panelVisible = openPanels[node.id] ? 'visible' : '';
+  const badge = node.important ? `<span class="grade-badge">${GRADE_EMOJI[node.grade] || '❗'}</span>` : '';
+  const deadline = node.deadline_type === 'exact' ? ` <span class="tree-deadline">📅${node.deadline_value}</span>`
+    : node.deadline_type === 'month' ? ` <span class="tree-deadline">📅${node.deadline_value} 중</span>`
+    : node.deadline_type === 'undecided' ? ` <span class="tree-deadline">📅미정</span>` : '';
+  const toggle = hasChildren
+    ? `<span class="tree-toggle" onclick="toggleProjectCollapse('${node.id}')">${collapsed ? '▶' : '▼'}</span>`
+    : `<span class="tree-toggle empty">·</span>`;
+  const childCount = hasChildren ? ` <span class="tree-child-count">(${children.length})</span>` : '';
+  const childrenHtml = (hasChildren && !collapsed) ? children.map(c => buildProjectNodeHtml(c, depth+1)).join('') : '';
+  return `
+    <div class="tree-node" id="node-${node.id}">
+      <div class="tree-row" style="padding-left:${10 + depth*18}px">
+        ${toggle}
+        <div class="item-check" onclick="completeProjectNode('${node.id}')"></div>
+        ${badge}
+        <span class="tree-text" onclick="togglePanel('${node.id}')">${escapeHtml(node.text)}${childCount}${deadline}</span>
+      </div>
+      <div class="item-panel ${panelVisible}" id="panel-${node.id}" style="padding-left:${28 + depth*18}px">
+        ${node.note ? `<div class="item-note">${escapeHtml(node.note)}</div>` : ''}
+        <div class="item-actions">
+          <button class="action-btn" onclick="openAddSubTask('${node.id}')">하위추가</button>
+          <button class="action-btn" onclick="moveProjectNode('${node.id}',-1)">위로</button>
+          <button class="action-btn" onclick="moveProjectNode('${node.id}',1)">아래로</button>
+          <button class="action-btn" onclick="openEditGtdItem('${node.id}')">수정</button>
+          <button class="action-btn danger" onclick="deleteProjectNode('${node.id}')">삭제</button>
+        </div>
+      </div>
+      ${childrenHtml}
+    </div>`;
+}
 
-  /* 받은편지함으로 이동 (현재 topic인 경우만) */
-  if (item.status === 'topic') {
-    html += `<button class="modal-option" onclick="moveItem('${id}', 'inbox', null)">받은편지함으로 이동</button>`;
+/* ════════════════════════════════════════
+   [업무 탭] 데드라인(exact) 기반 자동 편입
+   - 오늘업무: deadline_value === 오늘
+   - 주간업무: 이번 주(월~일) 안이지만 오늘은 아님 (오늘업무와 중복 표시 방지)
+   - 프로젝트 소속 항목은 프로젝트 루트로 집계해 "프로젝트명 (N)" 형태로 표시
+════════════════════════════════════════ */
+function getWeekRange() {
+  const now = new Date();
+  const day = now.getDay(); // 0=일 ~ 6=토
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now); monday.setDate(now.getDate() + diffToMonday); monday.setHours(0,0,0,0);
+  const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6); sunday.setHours(23,59,59,999);
+  return { monday, sunday };
+}
+function isDateToday(dateStr) { return dateStr === todayStr(); }
+function isDateThisWeek(dateStr) {
+  const parts = dateStr.split('-').map(Number);
+  const target = new Date(parts[0], parts[1]-1, parts[2], 12, 0, 0);
+  const { monday, sunday } = getWeekRange();
+  return target >= monday && target <= sunday;
+}
+function findProjectRoot(item) {
+  let cur = item;
+  while (cur.parent_id) {
+    const parent = data.items.find(i => i.id === cur.parent_id);
+    if (!parent) break;
+    cur = parent;
   }
+  return cur;
+}
 
-  /* 주제 목록 */
-  const topics = [...state.topics].sort((a, b) => a.order - b.order);
-  topics.forEach(t => {
-    if (item.topic !== t.id) {
-      html += `<button class="modal-option" onclick="moveItem('${id}', 'topic', '${t.id}')">${escapeHtml(t.name)}(으)로 이동</button>`;
+function renderWorkTab() {
+  const candidates = data.items.filter(i => i.deadline_type === 'exact' && i.deadline_value && i.status !== 'done');
+  const todayItems = candidates.filter(i => isDateToday(i.deadline_value));
+  const weekItems = candidates.filter(i => !isDateToday(i.deadline_value) && isDateThisWeek(i.deadline_value));
+  renderWorkGroup('work-today', todayItems);
+  renderWorkGroup('work-week', weekItems);
+}
+
+function renderWorkGroup(prefix, items) {
+  const listEl = document.getElementById('list-' + prefix);
+  const countEl = document.getElementById('count-' + prefix);
+  if (!items.length) {
+    countEl.textContent = '';
+    listEl.innerHTML = '<div class="empty-hint">없음</div>';
+    return;
+  }
+  const projectGroups = new Map(); // rootId -> { root, count }
+  const standalone = [];
+  items.forEach(i => {
+    if (i.gtd_category === 'project') {
+      const root = findProjectRoot(i);
+      const g = projectGroups.get(root.id) || { root, count: 0 };
+      g.count += 1;
+      projectGroups.set(root.id, g);
+    } else {
+      standalone.push(i);
     }
   });
 
-  html += `<button class="modal-option cancel" onclick="closeModal()">취소</button>`;
-  options.innerHTML = html;
+  const rows = [];
+  projectGroups.forEach(({ root, count }) => rows.push(buildWorkProjectRow(root, count)));
+  standalone.forEach(i => rows.push(buildWorkItemRow(i)));
 
+  countEl.textContent = `(${rows.length})`;
+  listEl.innerHTML = rows.join('');
+}
+
+function buildWorkProjectRow(root, count) {
+  return `
+    <li class="item">
+      <div class="item-body">
+        <div class="item-text" onclick="jumpToProject('${root.id}')">[프로젝트][${escapeHtml(topicName(root.topic))}] ${escapeHtml(root.text)} (${count})</div>
+      </div>
+    </li>`;
+}
+function buildWorkItemRow(i) {
+  const catLabel = GTD_LABELS[i.gtd_category] || i.gtd_category;
+  return `
+    <li class="item">
+      <div class="item-body">
+        <div class="item-text">[${catLabel}][${escapeHtml(topicName(i.topic))}] ${escapeHtml(i.text)}</div>
+        <div class="item-meta">기한: ${i.deadline_value}</div>
+      </div>
+    </li>`;
+}
+function jumpToProject(rootId) {
+  switchTopTab('gtd');
+  switchGtdTab('project');
+  setTimeout(() => {
+    const el = document.getElementById('node-' + rootId);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 50);
+}
+
+function openEditGtdItem(id) {
+  const item = data.items.find(i => i.id === id);
+  if (!item) return;
+  modalCtx = { type: 'edit_item', id };
+  document.getElementById('modal-title').textContent = '수정';
+  const topicOptions = data.topics.map(t => `<option value="${t.id}" ${t.id===item.topic?'selected':''}>${escapeHtml(t.name)}</option>`).join('');
+  const waitingField = item.gtd_category === 'waiting'
+    ? `<div class="field-label">대기 대상/내용</div><input type="text" id="edit-waiting" value="${escapeHtml(item.waiting_on||'')}" />` : '';
+  document.getElementById('modal-body').innerHTML = `
+    <input type="text" id="edit-text" value="${escapeHtml(item.text)}" placeholder="내용" />
+    <textarea id="edit-note" placeholder="메모">${escapeHtml(item.note||'')}</textarea>
+    <div class="field-label">주제</div>
+    <select id="edit-topic"><option value="">미분류</option>${topicOptions}</select>
+    <div class="field-label">데드라인</div>
+    <select id="edit-deadline-type" onchange="onEditDeadlineTypeChange()">
+      <option value="" ${!item.deadline_type?'selected':''}>없음</option>
+      <option value="exact" ${item.deadline_type==='exact'?'selected':''}>정확한 날짜</option>
+      <option value="month" ${item.deadline_type==='month'?'selected':''}>월 단위 (예: 7월 중)</option>
+      <option value="undecided" ${item.deadline_type==='undecided'?'selected':''}>미정</option>
+    </select>
+    <input type="date" id="edit-deadline-exact" class="${item.deadline_type==='exact'?'':'hidden-field'}" value="${item.deadline_type==='exact'?item.deadline_value:''}" />
+    <input type="month" id="edit-deadline-month" class="${item.deadline_type==='month'?'':'hidden-field'}" value="${item.deadline_type==='month'?item.deadline_value:''}" />
+    ${waitingField}
+    <div class="edit-form-actions">
+      <button class="edit-save-btn" onclick="saveEditGtdItem()">저장</button>
+      <button class="edit-cancel-btn" onclick="closeModal()">취소</button>
+    </div>`;
   document.getElementById('modal-overlay').classList.add('visible');
 }
-
-/* 모달 바깥 클릭으로 닫기 */
-document.getElementById('modal-overlay').addEventListener('click', e => {
-  if (e.target === document.getElementById('modal-overlay')) closeModal();
-});
-
-function closeModal() {
-  document.getElementById('modal-overlay').classList.remove('visible');
-  _moveTargetId = null;
+function onEditDeadlineTypeChange() {
+  const type = document.getElementById('edit-deadline-type').value;
+  document.getElementById('edit-deadline-exact').classList.toggle('hidden-field', type !== 'exact');
+  document.getElementById('edit-deadline-month').classList.toggle('hidden-field', type !== 'month');
 }
-
-function moveItem(id, status, topicId) {
-  const item = state.items.find(i => i.id === id);
+function saveEditGtdItem() {
+  const item = data.items.find(i => i.id === modalCtx.id);
   if (!item) return;
-  item.status = status;
-  item.topic  = topicId;
-  closeModal();
-  saveLocal();
-  renderAll();
-  saveToServer();
+  item.text = document.getElementById('edit-text').value.trim() || item.text;
+  item.note = document.getElementById('edit-note').value.trim() || null;
+  item.topic = document.getElementById('edit-topic').value || null;
+  const dType = document.getElementById('edit-deadline-type').value;
+  item.deadline_type = dType || null;
+  item.deadline_value = dType === 'exact' ? document.getElementById('edit-deadline-exact').value
+    : dType === 'month' ? document.getElementById('edit-deadline-month').value : null;
+  const waitingEl = document.getElementById('edit-waiting');
+  if (waitingEl) item.waiting_on = waitingEl.value.trim() || null;
+  closeModal(); persist(); renderAll();
 }
 
 /* ════════════════════════════════════════
-   [주제 관리]
+   [반복업무] 기존 weekly/biweekly/monthly + 신규 daily
 ════════════════════════════════════════ */
-
-/* 주제 추가 */
-document.getElementById('add-topic-btn').addEventListener('click', addTopic);
-document.getElementById('new-topic-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter') addTopic();
-});
-
-function addTopic() {
-  const input = document.getElementById('new-topic-input');
-  const name  = input.value.trim();
-  if (!name) return;
-
-  const maxOrder = state.topics.reduce((m, t) => Math.max(m, t.order), -1);
-  const newTopic = {
-    id: crypto.randomUUID(),
-    name,
-    order: maxOrder + 1
-  };
-
-  state.topics.push(newTopic);
-  input.value = '';
-  saveLocal();
-  renderAll();
-  saveToServer();
+function onRecFreqChange() {
+  const freq = document.getElementById('rec-add-freq').value;
+  document.getElementById('rec-add-dow').classList.toggle('hidden-field', freq === 'monthly' || freq === 'daily');
+  document.getElementById('rec-add-dom').classList.toggle('hidden-field', freq !== 'monthly');
+}
+function toggleAddRecurringForm() {
+  document.getElementById('add-recurring-form').classList.toggle('hidden-field');
+}
+function addRecurringItem() {
+  const textEl = document.getElementById('rec-add-text');
+  const text = textEl.value.trim();
+  if (!text) { textEl.focus(); return; }
+  const freq = document.getElementById('rec-add-freq').value;
+  data.recurring.push({
+    id: genId(), text, note: null, freq,
+    day_of_week: (freq === 'weekly' || freq === 'biweekly') ? parseInt(document.getElementById('rec-add-dow').value,10) : null,
+    day_of_month: freq === 'monthly' ? parseInt(document.getElementById('rec-add-dom').value,10) : null,
+    status: 'idle', last_done_at: null, last_activated_at: null, activated_at: null, skipped: false
+  });
+  textEl.value = '';
+  persist(); renderRecurring();
 }
 
-/* 주제 이름 수정 시작 */
-function startEditTopic(topicId) {
-  const nameEl  = document.getElementById(`topic-name-${topicId}`);
-  const editEl  = document.getElementById(`topic-edit-${topicId}`);
-  if (!nameEl || !editEl) return;
-  nameEl.style.display = 'none';
-  editEl.classList.add('visible');
-  editEl.focus();
-  editEl.select();
+function lastOccurrence(dow) {
+  const d = new Date(); const diff = (d.getDay() - dow + 7) % 7;
+  d.setDate(d.getDate() - diff); d.setHours(0,0,0,0); return d;
 }
+function getLastDayOfMonth(y,m) { return new Date(y, m+1, 0).getDate(); }
 
-/* Enter: 저장, Escape: 취소 */
-function handleTopicEditKey(e, topicId) {
-  if (e.key === 'Enter') { e.preventDefault(); saveTopicName(topicId); }
-  if (e.key === 'Escape') { cancelTopicEdit(topicId); }
+function shouldActivateRec(r) {
+  if (r.status === 'done') return false;
+  const now = new Date();
+  if (r.freq === 'daily') {
+    if (!r.last_done_at) return true;
+    const d = new Date(r.last_done_at);
+    return d.toDateString() !== now.toDateString();
+  }
+  if (r.freq === 'weekly') {
+    if (now.getDay() !== r.day_of_week) return false;
+    if (!r.last_done_at) return true;
+    return new Date(r.last_done_at) < lastOccurrence(r.day_of_week);
+  }
+  if (r.freq === 'biweekly') {
+    if (now.getDay() !== r.day_of_week) return false;
+    if (!r.last_activated_at) return true;
+    return (now - new Date(r.last_activated_at)) >= 13*24*60*60*1000;
+  }
+  if (r.freq === 'monthly') {
+    const target = r.day_of_month === 0 ? getLastDayOfMonth(now.getFullYear(), now.getMonth()) : r.day_of_month;
+    if (now.getDate() !== target) return false;
+    if (!r.last_done_at) return true;
+    const d = new Date(r.last_done_at);
+    return d.getFullYear() < now.getFullYear() || (d.getFullYear()===now.getFullYear() && d.getMonth() < now.getMonth());
+  }
+  return false;
 }
-
-function saveTopicName(topicId) {
-  const editEl = document.getElementById(`topic-edit-${topicId}`);
-  if (!editEl || !editEl.classList.contains('visible')) return;
-  const newName = editEl.value.trim();
-  if (!newName) { cancelTopicEdit(topicId); return; }
-
-  const topic = state.topics.find(t => t.id === topicId);
-  if (topic) topic.name = newName;
-  saveLocal();
-  renderAll();  /* 재렌더로 수정 모드 종료 */
-  saveToServer();
-}
-
-function cancelTopicEdit(topicId) {
-  const topic   = state.topics.find(t => t.id === topicId);
-  const nameEl  = document.getElementById(`topic-name-${topicId}`);
-  const editEl  = document.getElementById(`topic-edit-${topicId}`);
-  if (!topic || !nameEl || !editEl) return;
-  editEl.value = topic.name;
-  editEl.classList.remove('visible');
-  nameEl.style.display = '';
-}
-
-/* 주제 삭제: 소속 항목 inbox로 복귀 */
-function deleteTopic(topicId) {
-  const topic = state.topics.find(t => t.id === topicId);
-  if (!topic) return;
-  if (!confirm(`"${topic.name}" 주제를 삭제합니다.\n소속 항목은 받은편지함으로 이동됩니다.`)) return;
-
-  /* 소속 항목 inbox로 복귀 */
-  state.items.forEach(i => {
-    if (i.topic === topicId) {
-      i.status = 'inbox';
-      i.topic  = null;
+function checkRecActivation() {
+  const nowIso = new Date().toISOString();
+  data.recurring.forEach(r => {
+    if (shouldActivateRec(r)) {
+      if (r.status !== 'active') r.activated_at = nowIso;
+      r.status = 'active';
+      if (r.freq === 'biweekly') r.last_activated_at = nowIso;
     }
   });
-
-  state.topics = state.topics.filter(t => t.id !== topicId);
-  /* 명시적 삭제 목록에 기록 (서버 부활 방지) */
-  if (!pendingDel.topics.includes(topicId)) pendingDel.topics.push(topicId);
+}
+function formatMD(iso) { const d = new Date(iso); return `${d.getMonth()+1}/${d.getDate()}`; }
+function freqLabel(r) {
+  if (r.freq === 'daily') return '매일';
+  if (r.freq === 'weekly') return `매주 ${DAYS_KO[r.day_of_week]}`;
+  if (r.freq === 'biweekly') return `격주 ${DAYS_KO[r.day_of_week]}`;
+  if (r.freq === 'monthly') return r.day_of_month === 0 ? '매월 말일' : `매월 ${r.day_of_month}일`;
+  return '';
+}
+function completeRecItem(id) {
+  const r = data.recurring.find(x => x.id === id); if (!r) return;
+  r.status = 'done'; r.last_done_at = new Date().toISOString(); r.skipped = false;
+  persist(); renderRecurring();
+}
+function skipRecItem(id) {
+  const r = data.recurring.find(x => x.id === id); if (!r) return;
+  r.status = 'done'; r.last_done_at = new Date().toISOString(); r.skipped = true;
+  persist(); renderRecurring();
+}
+function revertRecItem(id) {
+  const r = data.recurring.find(x => x.id === id); if (!r) return;
+  r.status = 'active'; r.last_done_at = null; r.skipped = false;
+  persist(); renderRecurring();
+}
+function deleteRecItem(id) {
+  if (!confirm('삭제할까요?')) return;
+  data.recurring = data.recurring.filter(x => x.id !== id);
+  if (!pendingDel.recurring.includes(id)) pendingDel.recurring.push(id);
   savePendingDel();
-  saveLocal();
-  renderAll();
-  saveToServer();
+  persist(); renderRecurring();
+}
+function renderRecurring() {
+  checkRecActivation();
+  const active = data.recurring.filter(r => r.status === 'active');
+  const done = data.recurring.filter(r => r.status === 'done');
+  document.getElementById('count-rec-active').textContent = active.length ? `(${active.length})` : '';
+  document.getElementById('count-rec-done').textContent = done.length ? `(${done.length})` : '';
+
+  const buildItem = (r, isDone) => {
+    const panelVisible = openPanels[r.id] ? 'visible' : '';
+    const datePrefix = (!isDone && r.activated_at) ? `${formatMD(r.activated_at)} ` : '';
+    const doneStr = r.last_done_at ? `${r.skipped?'스킵':'완료'}: ${new Date(r.last_done_at).toLocaleDateString('ko-KR')}` : '';
+    const panelBtns = isDone
+      ? `<button class="action-btn" onclick="revertRecItem('${r.id}')">되돌리기</button><button class="action-btn danger" onclick="deleteRecItem('${r.id}')">삭제</button>`
+      : `<button class="action-btn" onclick="skipRecItem('${r.id}')">스킵</button><button class="action-btn danger" onclick="deleteRecItem('${r.id}')">삭제</button>`;
+    return `
+      <li class="item ${isDone?'item-done':''}" id="item-${r.id}">
+        <div class="item-check ${isDone?'done':''}" onclick="${isDone?'':`completeRecItem('${r.id}')`}">${isDone?'✓':''}</div>
+        <div class="item-body">
+          <div class="item-text" onclick="togglePanel('${r.id}')">${datePrefix}${escapeHtml(r.text)}</div>
+          <div class="item-meta">${freqLabel(r)}${doneStr?' · '+doneStr:''}</div>
+          <div class="item-panel ${panelVisible}" id="panel-${r.id}"><div class="item-actions">${panelBtns}</div></div>
+        </div>
+      </li>`;
+  };
+  document.getElementById('list-rec-active').innerHTML = active.length ? active.map(r=>buildItem(r,false)).join('') : '<div class="empty-hint">활성 반복업무 없음</div>';
+  document.getElementById('list-rec-done').innerHTML = done.length ? done.map(r=>buildItem(r,true)).join('') : '<div class="empty-hint">없음</div>';
 }
 
 /* ════════════════════════════════════════
-   [유틸리티]
+   [업무세트 체크리스트 - 매일 리셋]
 ════════════════════════════════════════ */
-
-/* 오늘 날짜 YYYY-MM-DD (KST) */
-function todayStr() {
-  const d = new Date();
-  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
-  return kst.toISOString().slice(0, 10);
+function toggleAddChecklistForm() {
+  document.getElementById('add-checklist-form').classList.toggle('hidden-field');
+}
+function addChecklistSet() {
+  const titleEl = document.getElementById('cs-add-title');
+  const itemsEl = document.getElementById('cs-add-items');
+  const title = titleEl.value.trim();
+  if (!title) { titleEl.focus(); return; }
+  const lines = itemsEl.value.split('\n').map(s => s.trim()).filter(Boolean);
+  if (!lines.length) { itemsEl.focus(); return; }
+  data.checklist_sets.push({
+    id: genId(), title,
+    items: lines.map((text, idx) => ({ id: genId(), text, order: idx })),
+    checked_today: [], last_reset_date: todayStr()
+  });
+  titleEl.value = ''; itemsEl.value = '';
+  persist(); renderChecklistSets();
+}
+function checkResetChecklistSets() {
+  const today = todayStr();
+  data.checklist_sets.forEach(cs => {
+    if (cs.last_reset_date !== today) { cs.checked_today = []; cs.last_reset_date = today; }
+  });
+}
+function toggleChecklistSubItem(setId, itemId) {
+  const cs = data.checklist_sets.find(c => c.id === setId); if (!cs) return;
+  const idx = cs.checked_today.indexOf(itemId);
+  if (idx >= 0) cs.checked_today.splice(idx, 1); else cs.checked_today.push(itemId);
+  persist(); renderChecklistSets();
+}
+function deleteChecklistSet(id) {
+  if (!confirm('이 업무세트를 삭제할까요?')) return;
+  data.checklist_sets = data.checklist_sets.filter(c => c.id !== id);
+  if (!pendingDel.checklist_sets.includes(id)) pendingDel.checklist_sets.push(id);
+  savePendingDel();
+  persist(); renderChecklistSets();
+}
+function renderChecklistSets() {
+  checkResetChecklistSets();
+  const container = document.getElementById('list-checklist');
+  document.getElementById('count-checklist').textContent = data.checklist_sets.length ? `(${data.checklist_sets.length})` : '';
+  if (!data.checklist_sets.length) { container.innerHTML = '<div class="empty-hint">업무세트 없음</div>'; return; }
+  container.innerHTML = data.checklist_sets.map(cs => {
+    const total = cs.items.length;
+    const doneCount = cs.checked_today.length;
+    const subHtml = cs.items.sort((a,b)=>a.order-b.order).map(it => {
+      const isDone = cs.checked_today.includes(it.id);
+      return `
+        <div class="checklist-sub-item">
+          <div class="checklist-sub-check ${isDone?'done':''}" onclick="toggleChecklistSubItem('${cs.id}','${it.id}')">${isDone?'✓':''}</div>
+          <span class="checklist-sub-text ${isDone?'done':''}">${escapeHtml(it.text)}</span>
+        </div>`;
+    }).join('');
+    return `
+      <div class="checklist-set">
+        <div class="checklist-set-title">${escapeHtml(cs.title)} (${doneCount}/${total}) <button class="action-btn danger" onclick="deleteChecklistSet('${cs.id}')" style="float:right">삭제</button></div>
+        ${subHtml}
+      </div>`;
+  }).join('');
 }
 
-/* XSS 방지용 HTML 이스케이프 */
-function escapeHtml(str) {
-  if (!str) return '';
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-/* 상태바 메시지 */
-function setStatus(msg, isError) {
-  const bar = document.getElementById('status-bar');
-  bar.textContent = msg;
-  bar.className = isError ? 'error' : '';
-}
-
-/* ════════════════════════════════════════
-   [초기화]
-════════════════════════════════════════ */
-document.addEventListener('DOMContentLoaded', () => {
-  /* 미동기화 삭제 목록 복원 */
-  loadPendingDel();
-
-  /* 먼저 로컬 데이터로 즉시 렌더 (체감 속도) */
-  const local = loadLocal();
-  if (local) {
-    state = local;
-    renderAll();
-  }
-
-  /* 이후 서버 최신본 pull */
-  loadFromServer();
-});
+/* 초기 실행 */
+init();
 </script>
 </body>
 </html>
