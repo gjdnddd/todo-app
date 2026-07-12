@@ -194,6 +194,15 @@
   <div id="input-panel">
     <input type="text" id="input-text" placeholder="할 일 입력" autocomplete="off" />
     <textarea id="input-note" placeholder="메모 (선택)" rows="2"></textarea>
+    <div class="field-label">데드라인 (선택)</div>
+    <select id="input-deadline-type" onchange="onInputDeadlineTypeChange()">
+      <option value="">없음</option>
+      <option value="exact">정확한 날짜</option>
+      <option value="month">월 단위 (예: 7월 중)</option>
+      <option value="undecided">미정</option>
+    </select>
+    <input type="date" id="input-deadline-exact" class="hidden-field" />
+    <input type="month" id="input-deadline-month" class="hidden-field" />
     <div class="toggle-row">
       <button class="toggle-btn" id="trigger-toggle" onclick="toggleTrigger()">트리거</button>
     </div>
@@ -330,7 +339,11 @@
 
   <!-- 캘린더 -->
   <div class="gtd-view" id="gtd-calendar">
-    <div class="empty-hint" style="padding:14px 14px 4px">실시간 구글 캘린더 연동 대신, 채팅에서 "캘린더 확인해서 할일에 넣어줘"라고 요청하면 반영됨(수동)</div>
+    <div class="empty-hint" style="padding:14px 14px 4px">
+      실시간 구글 캘린더 연동은 지원하지 않고, 채팅에서 수동으로 요청하면 반영돼요.<br/>
+      · 캘린더→할일: "캘린더 확인해서 할일에 넣어줘"<br/>
+      · 할일→캘린더: "할일앱 캘린더 확인해서 구글캘린더에 반영해줘"
+    </div>
     <div id="list-calendar"></div>
     <div class="section">
       <div class="section-header"><span class="section-title">완료</span><span class="section-count" id="count-calendar-done"></span></div>
@@ -607,30 +620,47 @@ function renderUnclassified() {
   document.getElementById('count-unclassified').textContent = items.length ? `(${items.length})` : '';
   const list = document.getElementById('list-unclassified');
   if (!items.length) { list.innerHTML = '<div class="empty-hint">분류할 항목이 없습니다</div>'; return; }
-  list.innerHTML = items.map(i => `
+  list.innerHTML = items.map(i => {
+    const deadlineStr = i.deadline_type === 'exact' ? `<div class="item-meta">기한: ${i.deadline_value}</div>`
+      : i.deadline_type === 'month' ? `<div class="item-meta">기한: ${i.deadline_value} 중</div>`
+      : i.deadline_type === 'undecided' ? `<div class="item-meta">기한: 미정</div>` : '';
+    return `
     <li class="item" id="item-${i.id}">
       <div class="item-body">
         <div class="item-text" onclick="openClassifyModal('${i.id}')">${escapeHtml(i.text)}</div>
         ${i.note ? `<div class="item-meta">${escapeHtml(i.note)}</div>` : ''}
+        ${deadlineStr}
       </div>
-    </li>`).join('');
+    </li>`;
+  }).join('');
 }
 
+function onInputDeadlineTypeChange() {
+  const type = document.getElementById('input-deadline-type').value;
+  document.getElementById('input-deadline-exact').classList.toggle('hidden-field', type !== 'exact');
+  document.getElementById('input-deadline-month').classList.toggle('hidden-field', type !== 'month');
+}
 function addUnclassifiedItem() {
   const textEl = document.getElementById('input-text');
   const noteEl = document.getElementById('input-note');
   const text = textEl.value.trim();
   if (!text) { textEl.focus(); return; }
+  const dType = document.getElementById('input-deadline-type').value;
+  const deadline_type = dType || null;
+  const deadline_value = dType === 'exact' ? document.getElementById('input-deadline-exact').value
+    : dType === 'month' ? document.getElementById('input-deadline-month').value : null;
   data.items.push({
     id: genId(), text, note: noteEl.value.trim() || null,
     gtd_category: null, topic: null,
-    deadline_type: null, deadline_value: null,
+    deadline_type, deadline_value,
     parent_id: null, order: data.items.length,
     status: 'active', waiting_on: null, calendar_registered: false,
     important: false, grade: null,
     created_at: new Date().toISOString(), completed_at: null
   });
   textEl.value = ''; noteEl.value = '';
+  document.getElementById('input-deadline-type').value = '';
+  onInputDeadlineTypeChange();
   persist(); renderAll();
 }
 
@@ -1036,7 +1066,7 @@ function buildWorkProjectRow(root, count) {
     </li>`;
 }
 function buildWorkItemRow(i) {
-  const catLabel = GTD_LABELS[i.gtd_category] || i.gtd_category;
+  const catLabel = GTD_LABELS[i.gtd_category] || '미분류';
   return `
     <li class="item">
       <div class="item-body">
