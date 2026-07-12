@@ -244,6 +244,7 @@
       </div>
       <div class="edit-form hidden-field" id="add-recurring-form">
         <input type="text" id="rec-add-text" placeholder="할 일" />
+        <textarea id="rec-add-note" placeholder="메모 (선택)"></textarea>
         <select id="rec-add-freq" onchange="onRecFreqChange()">
           <option value="daily">매일</option>
           <option value="weekly">매주</option>
@@ -296,6 +297,10 @@
   <!-- 다음행동 -->
   <div class="gtd-view" id="gtd-next_action">
     <div id="list-next_action"></div>
+    <div class="section">
+      <div class="section-header"><span class="section-title">완료</span><span class="section-count" id="count-next_action-done"></span></div>
+      <div id="list-next_action-done"></div>
+    </div>
   </div>
 
   <!-- 프로젝트 -->
@@ -317,17 +322,29 @@
   <!-- 대기중 -->
   <div class="gtd-view" id="gtd-waiting">
     <div id="list-waiting"></div>
+    <div class="section">
+      <div class="section-header"><span class="section-title">완료</span><span class="section-count" id="count-waiting-done"></span></div>
+      <div id="list-waiting-done"></div>
+    </div>
   </div>
 
   <!-- 캘린더 -->
   <div class="gtd-view" id="gtd-calendar">
     <div class="empty-hint" style="padding:14px 14px 4px">실시간 구글 캘린더 연동 대신, 채팅에서 "캘린더 확인해서 할일에 넣어줘"라고 요청하면 반영됨(수동)</div>
     <div id="list-calendar"></div>
+    <div class="section">
+      <div class="section-header"><span class="section-title">완료</span><span class="section-count" id="count-calendar-done"></span></div>
+      <div id="list-calendar-done"></div>
+    </div>
   </div>
 
   <!-- 언젠가 -->
   <div class="gtd-view" id="gtd-someday">
     <div id="list-someday"></div>
+    <div class="section">
+      <div class="section-header"><span class="section-title">완료</span><span class="section-count" id="count-someday-done"></span></div>
+      <div id="list-someday-done"></div>
+    </div>
   </div>
 
   <!-- 메모 -->
@@ -577,6 +594,7 @@ function topicName(id) {
 function renderAll() {
   renderUnclassified();
   ['next_action','waiting','calendar','someday','memo'].forEach(renderGtdFlatList);
+  ['next_action','waiting','calendar','someday'].forEach(renderGtdDoneList);
   renderProjectTree();
   renderRecurring();
   renderChecklistSets();
@@ -705,6 +723,43 @@ function buildGtdItemHtml(i, category) {
         </div>
       </div>
     </li>`;
+}
+
+/* ── 완료 섹션 (다음행동/대기중/캘린더/언젠가) ── */
+function renderGtdDoneList(category) {
+  const container = document.getElementById('list-' + category + '-done');
+  const countEl = document.getElementById('count-' + category + '-done');
+  if (!container) return;
+  let items = data.items.filter(i => i.gtd_category === category && i.status === 'done');
+  if (category === 'next_action') items = items.filter(i => i.parent_id == null);
+  countEl.textContent = items.length ? `(${items.length})` : '';
+  if (!items.length) { container.innerHTML = '<div class="empty-hint">없음</div>'; return; }
+  items.sort((a,b) => new Date(b.completed_at||0) - new Date(a.completed_at||0));
+  container.innerHTML = `<ul class="item-list">` + items.map(i => buildGtdDoneItemHtml(i)).join('') + `</ul>`;
+}
+function buildGtdDoneItemHtml(i) {
+  const panelVisible = openPanels[i.id] ? 'visible' : '';
+  const doneStr = i.completed_at ? `완료: ${new Date(i.completed_at).toLocaleDateString('ko-KR')}` : '';
+  return `
+    <li class="item item-done" id="item-${i.id}">
+      <div class="item-check done">✓</div>
+      <div class="item-body">
+        <div class="item-text" onclick="togglePanel('${i.id}')">${escapeHtml(i.text)}</div>
+        <div class="item-meta">${doneStr}</div>
+        <div class="item-panel ${panelVisible}" id="panel-${i.id}">
+          <div class="item-actions">
+            <button class="action-btn" onclick="revertGtdItem('${i.id}')">되돌리기</button>
+            <button class="action-btn danger" onclick="deleteGtdItem('${i.id}')">삭제</button>
+          </div>
+        </div>
+      </div>
+    </li>`;
+}
+function revertGtdItem(id) {
+  const item = data.items.find(i => i.id === id);
+  if (!item) return;
+  item.status = 'active'; item.completed_at = null;
+  persist(); renderAll();
 }
 
 function completeGtdItem(id) {
@@ -1005,11 +1060,22 @@ function openEditGtdItem(id) {
   modalCtx = { type: 'edit_item', id };
   document.getElementById('modal-title').textContent = '수정';
   const topicOptions = data.topics.map(t => `<option value="${t.id}" ${t.id===item.topic?'selected':''}>${escapeHtml(t.name)}</option>`).join('');
-  const waitingField = item.gtd_category === 'waiting'
-    ? `<div class="field-label">대기 대상/내용</div><input type="text" id="edit-waiting" value="${escapeHtml(item.waiting_on||'')}" />` : '';
+  const waitingField = `<div class="field-label" id="edit-waiting-label">대기 대상/내용</div><input type="text" id="edit-waiting" value="${escapeHtml(item.waiting_on||'')}" />`;
+  /* 프로젝트 하위작업(parent_id 있음)은 카테고리 이동 불가 — 트리 안에서만 관리 */
+  const categoryField = item.parent_id == null ? `
+    <div class="field-label">GTD 카테고리</div>
+    <select id="edit-category" onchange="onEditCategoryChange()">
+      <option value="next_action" ${item.gtd_category==='next_action'?'selected':''}>다음행동</option>
+      <option value="project" ${item.gtd_category==='project'?'selected':''}>프로젝트</option>
+      <option value="waiting" ${item.gtd_category==='waiting'?'selected':''}>대기중</option>
+      <option value="calendar" ${item.gtd_category==='calendar'?'selected':''}>캘린더</option>
+      <option value="someday" ${item.gtd_category==='someday'?'selected':''}>언젠가</option>
+      <option value="memo" ${item.gtd_category==='memo'?'selected':''}>메모</option>
+    </select>` : '';
   document.getElementById('modal-body').innerHTML = `
     <input type="text" id="edit-text" value="${escapeHtml(item.text)}" placeholder="내용" />
     <textarea id="edit-note" placeholder="메모">${escapeHtml(item.note||'')}</textarea>
+    ${categoryField}
     <div class="field-label">주제</div>
     <select id="edit-topic"><option value="">미분류</option>${topicOptions}</select>
     <div class="field-label">데드라인</div>
@@ -1021,7 +1087,7 @@ function openEditGtdItem(id) {
     </select>
     <input type="date" id="edit-deadline-exact" class="${item.deadline_type==='exact'?'':'hidden-field'}" value="${item.deadline_type==='exact'?item.deadline_value:''}" />
     <input type="month" id="edit-deadline-month" class="${item.deadline_type==='month'?'':'hidden-field'}" value="${item.deadline_type==='month'?item.deadline_value:''}" />
-    ${waitingField}
+    <div id="edit-waiting-wrap" class="${item.gtd_category==='waiting'?'':'hidden-field'}">${waitingField}</div>
     <div class="edit-form-actions">
       <button class="edit-save-btn" onclick="saveEditGtdItem()">저장</button>
       <button class="edit-cancel-btn" onclick="closeModal()">취소</button>
@@ -1033,9 +1099,29 @@ function onEditDeadlineTypeChange() {
   document.getElementById('edit-deadline-exact').classList.toggle('hidden-field', type !== 'exact');
   document.getElementById('edit-deadline-month').classList.toggle('hidden-field', type !== 'month');
 }
+function onEditCategoryChange() {
+  const catEl = document.getElementById('edit-category');
+  const wrap = document.getElementById('edit-waiting-wrap');
+  if (catEl && wrap) wrap.classList.toggle('hidden-field', catEl.value !== 'waiting');
+}
 function saveEditGtdItem() {
   const item = data.items.find(i => i.id === modalCtx.id);
   if (!item) return;
+  const catEl = document.getElementById('edit-category');
+  if (catEl) {
+    const newCategory = catEl.value;
+    if (newCategory !== item.gtd_category) {
+      if (item.gtd_category === 'project' && getChildren(item.id).length > 0 && newCategory !== 'project') {
+        alert('하위작업이 있는 프로젝트는 다른 카테고리로 이동할 수 없어요. 먼저 하위작업을 정리해주세요.');
+      } else {
+        item.gtd_category = newCategory;
+        if (newCategory === 'project' && item.order == null) {
+          const roots = data.items.filter(i => i.gtd_category === 'project' && i.parent_id == null);
+          item.order = roots.reduce((m,s) => Math.max(m, s.order||0), -1) + 1;
+        }
+      }
+    }
+  }
   item.text = document.getElementById('edit-text').value.trim() || item.text;
   item.note = document.getElementById('edit-note').value.trim() || null;
   item.topic = document.getElementById('edit-topic').value || null;
@@ -1061,17 +1147,67 @@ function toggleAddRecurringForm() {
 }
 function addRecurringItem() {
   const textEl = document.getElementById('rec-add-text');
+  const noteEl = document.getElementById('rec-add-note');
   const text = textEl.value.trim();
   if (!text) { textEl.focus(); return; }
   const freq = document.getElementById('rec-add-freq').value;
   data.recurring.push({
-    id: genId(), text, note: null, freq,
+    id: genId(), text, note: noteEl.value.trim() || null, freq,
     day_of_week: (freq === 'weekly' || freq === 'biweekly') ? parseInt(document.getElementById('rec-add-dow').value,10) : null,
     day_of_month: freq === 'monthly' ? parseInt(document.getElementById('rec-add-dom').value,10) : null,
     status: 'idle', last_done_at: null, last_activated_at: null, activated_at: null, skipped: false
   });
-  textEl.value = '';
+  textEl.value = ''; noteEl.value = '';
   persist(); renderRecurring();
+}
+
+function openEditRecItem(id) {
+  const r = data.recurring.find(x => x.id === id);
+  if (!r) return;
+  modalCtx = { type: 'edit_rec', id };
+  document.getElementById('modal-title').textContent = '반복업무 수정';
+  document.getElementById('modal-body').innerHTML = `
+    <input type="text" id="edit-rec-text" value="${escapeHtml(r.text)}" placeholder="할 일" />
+    <textarea id="edit-rec-note" placeholder="메모 (선택)">${escapeHtml(r.note||'')}</textarea>
+    <select id="edit-rec-freq" onchange="onEditRecFreqChange()">
+      <option value="daily" ${r.freq==='daily'?'selected':''}>매일</option>
+      <option value="weekly" ${r.freq==='weekly'?'selected':''}>매주</option>
+      <option value="biweekly" ${r.freq==='biweekly'?'selected':''}>격주</option>
+      <option value="monthly" ${r.freq==='monthly'?'selected':''}>매월</option>
+    </select>
+    <select id="edit-rec-dow" class="${(r.freq==='weekly'||r.freq==='biweekly')?'':'hidden-field'}">
+      <option value="0" ${r.day_of_week===0?'selected':''}>일요일</option>
+      <option value="1" ${r.day_of_week===1?'selected':''}>월요일</option>
+      <option value="2" ${r.day_of_week===2?'selected':''}>화요일</option>
+      <option value="3" ${r.day_of_week===3?'selected':''}>수요일</option>
+      <option value="4" ${r.day_of_week===4?'selected':''}>목요일</option>
+      <option value="5" ${r.day_of_week===5?'selected':''}>금요일</option>
+      <option value="6" ${r.day_of_week===6?'selected':''}>토요일</option>
+    </select>
+    <select id="edit-rec-dom" class="${r.freq==='monthly'?'':'hidden-field'}">
+      <option value="0" ${r.day_of_month===0?'selected':''}>말일</option>
+      ${Array.from({length:31},(_,i)=>`<option value="${i+1}" ${r.day_of_month===i+1?'selected':''}>${i+1}일</option>`).join('')}
+    </select>
+    <div class="edit-form-actions">
+      <button class="edit-save-btn" onclick="saveEditRecItem()">저장</button>
+      <button class="edit-cancel-btn" onclick="closeModal()">취소</button>
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('visible');
+}
+function onEditRecFreqChange() {
+  const freq = document.getElementById('edit-rec-freq').value;
+  document.getElementById('edit-rec-dow').classList.toggle('hidden-field', freq === 'monthly' || freq === 'daily');
+  document.getElementById('edit-rec-dom').classList.toggle('hidden-field', freq !== 'monthly');
+}
+function saveEditRecItem() {
+  const r = data.recurring.find(x => x.id === modalCtx.id);
+  if (!r) return;
+  r.text = document.getElementById('edit-rec-text').value.trim() || r.text;
+  r.note = document.getElementById('edit-rec-note').value.trim() || null;
+  r.freq = document.getElementById('edit-rec-freq').value;
+  r.day_of_week = (r.freq === 'weekly' || r.freq === 'biweekly') ? parseInt(document.getElementById('edit-rec-dow').value,10) : null;
+  r.day_of_month = r.freq === 'monthly' ? parseInt(document.getElementById('edit-rec-dom').value,10) : null;
+  closeModal(); persist(); renderRecurring();
 }
 
 function lastOccurrence(dow) {
@@ -1160,13 +1296,14 @@ function renderRecurring() {
     const doneStr = r.last_done_at ? `${r.skipped?'스킵':'완료'}: ${new Date(r.last_done_at).toLocaleDateString('ko-KR')}` : '';
     const panelBtns = isDone
       ? `<button class="action-btn" onclick="revertRecItem('${r.id}')">되돌리기</button><button class="action-btn danger" onclick="deleteRecItem('${r.id}')">삭제</button>`
-      : `<button class="action-btn" onclick="skipRecItem('${r.id}')">스킵</button><button class="action-btn danger" onclick="deleteRecItem('${r.id}')">삭제</button>`;
+      : `<button class="action-btn" onclick="openEditRecItem('${r.id}')">수정</button><button class="action-btn" onclick="skipRecItem('${r.id}')">스킵</button><button class="action-btn danger" onclick="deleteRecItem('${r.id}')">삭제</button>`;
     return `
       <li class="item ${isDone?'item-done':''}" id="item-${r.id}">
         <div class="item-check ${isDone?'done':''}" onclick="${isDone?'':`completeRecItem('${r.id}')`}">${isDone?'✓':''}</div>
         <div class="item-body">
           <div class="item-text" onclick="togglePanel('${r.id}')">${datePrefix}${escapeHtml(r.text)}</div>
           <div class="item-meta">${freqLabel(r)}${doneStr?' · '+doneStr:''}</div>
+          ${r.note ? `<div class="item-meta">${escapeHtml(r.note)}</div>` : ''}
           <div class="item-panel ${panelVisible}" id="panel-${r.id}"><div class="item-actions">${panelBtns}</div></div>
         </div>
       </li>`;
@@ -1215,6 +1352,41 @@ function deleteChecklistSet(id) {
   savePendingDel();
   persist(); renderChecklistSets();
 }
+function openEditChecklistSet(id) {
+  const cs = data.checklist_sets.find(c => c.id === id);
+  if (!cs) return;
+  modalCtx = { type: 'edit_checklist', id };
+  document.getElementById('modal-title').textContent = '업무세트 수정';
+  const itemsText = cs.items.sort((a,b)=>a.order-b.order).map(it => it.text).join('\n');
+  document.getElementById('modal-body').innerHTML = `
+    <input type="text" id="edit-cs-title" value="${escapeHtml(cs.title)}" placeholder="세트 이름" />
+    <div class="field-label">하위 항목 (줄바꿈으로 구분)</div>
+    <textarea id="edit-cs-items" rows="6">${escapeHtml(itemsText)}</textarea>
+    <div class="edit-form-actions">
+      <button class="edit-save-btn" onclick="saveEditChecklistSet()">저장</button>
+      <button class="edit-cancel-btn" onclick="closeModal()">취소</button>
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('visible');
+}
+function saveEditChecklistSet() {
+  const cs = data.checklist_sets.find(c => c.id === modalCtx.id);
+  if (!cs) return;
+  const title = document.getElementById('edit-cs-title').value.trim();
+  if (!title) return;
+  const lines = document.getElementById('edit-cs-items').value.split('\n').map(s => s.trim()).filter(Boolean);
+  if (!lines.length) return;
+  /* 텍스트가 그대로인 항목은 id 보존(체크 상태 유지), 나머지는 새 id */
+  const oldByText = new Map(cs.items.map(it => [it.text, it]));
+  const newItems = lines.map((text, idx) => {
+    const existing = oldByText.get(text);
+    return { id: existing ? existing.id : genId(), text, order: idx };
+  });
+  const newIds = new Set(newItems.map(it => it.id));
+  cs.title = title;
+  cs.items = newItems;
+  cs.checked_today = cs.checked_today.filter(id => newIds.has(id));
+  closeModal(); persist(); renderChecklistSets();
+}
 function renderChecklistSets() {
   checkResetChecklistSets();
   const container = document.getElementById('list-checklist');
@@ -1233,7 +1405,12 @@ function renderChecklistSets() {
     }).join('');
     return `
       <div class="checklist-set">
-        <div class="checklist-set-title">${escapeHtml(cs.title)} (${doneCount}/${total}) <button class="action-btn danger" onclick="deleteChecklistSet('${cs.id}')" style="float:right">삭제</button></div>
+        <div class="checklist-set-title">${escapeHtml(cs.title)} (${doneCount}/${total})
+          <span style="float:right">
+            <button class="action-btn" onclick="openEditChecklistSet('${cs.id}')">수정</button>
+            <button class="action-btn danger" onclick="deleteChecklistSet('${cs.id}')">삭제</button>
+          </span>
+        </div>
         ${subHtml}
       </div>`;
   }).join('');
