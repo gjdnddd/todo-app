@@ -1020,18 +1020,30 @@ function findProjectRoot(item) {
   return cur;
 }
 
+function isFirstDayOfDeadlineMonth(i) {
+  if (i.deadline_type !== 'month' || !i.deadline_value) return false;
+  const now = new Date();
+  const parts = i.deadline_value.split('-').map(Number);
+  return now.getFullYear() === parts[0] && (now.getMonth() + 1) === parts[1] && now.getDate() === 1;
+}
+
 function renderWorkTab() {
   const candidates = data.items.filter(i => i.deadline_type === 'exact' && i.deadline_value && i.status !== 'done');
   const todayItems = candidates.filter(i => isDateToday(i.deadline_value));
   const weekItems = candidates.filter(i => !isDateToday(i.deadline_value) && isDateThisWeek(i.deadline_value));
-  renderWorkGroup('work-today', todayItems);
-  renderWorkGroup('work-week', weekItems);
+  const nudges = data.items.filter(i =>
+    i.gtd_category === 'waiting' && i.status !== 'done' &&
+    isFirstDayOfDeadlineMonth(i) && i.month_nudge_ack_date !== todayStr()
+  );
+  renderWorkGroup('work-today', todayItems, nudges);
+  renderWorkGroup('work-week', weekItems, []);
 }
 
-function renderWorkGroup(prefix, items) {
+function renderWorkGroup(prefix, items, nudges) {
   const listEl = document.getElementById('list-' + prefix);
   const countEl = document.getElementById('count-' + prefix);
-  if (!items.length) {
+  const totalCount = items.length + (nudges ? nudges.length : 0);
+  if (!totalCount) {
     countEl.textContent = '';
     listEl.innerHTML = '<div class="empty-hint">없음</div>';
     return;
@@ -1052,6 +1064,7 @@ function renderWorkGroup(prefix, items) {
   const rows = [];
   projectGroups.forEach(({ root, count }) => rows.push(buildWorkProjectRow(root, count)));
   standalone.forEach(i => rows.push(buildWorkItemRow(i)));
+  (nudges || []).forEach(i => rows.push(buildWorkNudgeRow(i)));
 
   countEl.textContent = `(${rows.length})`;
   listEl.innerHTML = rows.join('');
@@ -1074,6 +1087,23 @@ function buildWorkItemRow(i) {
         <div class="item-meta">기한: ${i.deadline_value}</div>
       </div>
     </li>`;
+}
+function buildWorkNudgeRow(i) {
+  return `
+    <li class="item">
+      <div class="item-body">
+        <div class="item-text">[대기중][${escapeHtml(topicName(i.topic))}] ${escapeHtml(i.text)} <span class="item-meta">(${i.deadline_value} 시작)</span></div>
+        <div class="item-actions">
+          <button class="action-btn" onclick="dismissMonthNudge('${i.id}')">확인 (대기중으로)</button>
+        </div>
+      </div>
+    </li>`;
+}
+function dismissMonthNudge(id) {
+  const item = data.items.find(i => i.id === id);
+  if (!item) return;
+  item.month_nudge_ack_date = todayStr();
+  persist(); renderWorkTab();
 }
 function jumpToProject(rootId) {
   switchTopTab('gtd');
@@ -1117,6 +1147,14 @@ function openEditGtdItem(id) {
     </select>
     <input type="date" id="edit-deadline-exact" class="${item.deadline_type==='exact'?'':'hidden-field'}" value="${item.deadline_type==='exact'?item.deadline_value:''}" />
     <input type="month" id="edit-deadline-month" class="${item.deadline_type==='month'?'':'hidden-field'}" value="${item.deadline_type==='month'?item.deadline_value:''}" />
+    <div class="field-label">중요도</div>
+    <select id="edit-grade">
+      <option value="" ${!item.important?'selected':''}>보통</option>
+      <option value="S" ${item.important&&item.grade==='S'?'selected':''}>🔴 S</option>
+      <option value="A" ${item.important&&item.grade==='A'?'selected':''}>🟠 A</option>
+      <option value="B" ${item.important&&item.grade==='B'?'selected':''}>🟡 B</option>
+      <option value="C" ${item.important&&item.grade==='C'?'selected':''}>⚪ C</option>
+    </select>
     <div id="edit-waiting-wrap" class="${item.gtd_category==='waiting'?'':'hidden-field'}">${waitingField}</div>
     <div class="edit-form-actions">
       <button class="edit-save-btn" onclick="saveEditGtdItem()">저장</button>
@@ -1161,6 +1199,9 @@ function saveEditGtdItem() {
     : dType === 'month' ? document.getElementById('edit-deadline-month').value : null;
   const waitingEl = document.getElementById('edit-waiting');
   if (waitingEl) item.waiting_on = waitingEl.value.trim() || null;
+  const gradeVal = document.getElementById('edit-grade').value;
+  item.important = !!gradeVal;
+  item.grade = gradeVal || null;
   closeModal(); persist(); renderAll();
 }
 
@@ -1247,7 +1288,6 @@ function lastOccurrence(dow) {
 function getLastDayOfMonth(y,m) { return new Date(y, m+1, 0).getDate(); }
 
 function shouldActivateRec(r) {
-  if (r.status === 'done') return false;
   const now = new Date();
   if (r.freq === 'daily') {
     if (!r.last_done_at) return true;
