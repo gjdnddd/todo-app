@@ -1082,6 +1082,7 @@ function buildWorkItemRow(i) {
   const catLabel = GTD_LABELS[i.gtd_category] || '미분류';
   return `
     <li class="item">
+      <div class="item-check" onclick="completeGtdItem('${i.id}')"></div>
       <div class="item-body">
         <div class="item-text">[${catLabel}][${escapeHtml(topicName(i.topic))}] ${escapeHtml(i.text)}</div>
         <div class="item-meta">기한: ${i.deadline_value}</div>
