@@ -759,7 +759,8 @@ function buildGtdItemHtml(i, category) {
         <div class="item-panel" id="panel-${i.id}">
           <div class="item-actions">
             <button class="action-btn" onclick="openEditGtdItem('${i.id}')">수정</button>
-            <button class="action-btn" onclick="togglePinToday('${i.id}')">${i.pinned_today === todayStr() ? '오늘 해제' : '오늘 추가'}</button>
+            <button class="action-btn" onclick="togglePinToday('${i.id}')">${i.pinned_today === todayStr() ? '오늘 해제' : '오늘업무 추가'}</button>
+            <button class="action-btn" onclick="togglePinWeek('${i.id}')">${i.pinned_week === weekIdStr() ? '주간 해제' : '주간업무 추가'}</button>
             <button class="action-btn danger" onclick="deleteGtdItem('${i.id}')">삭제</button>
           </div>
         </div>
@@ -801,6 +802,24 @@ function togglePinToday(id) {
   const item = data.items.find(i => i.id === id);
   if (!item) return;
   item.pinned_today = item.pinned_today === todayStr() ? null : todayStr();
+  persist(); renderAll();
+}
+function weekIdStr() {
+  const { monday } = getWeekRange();
+  return `${monday.getFullYear()}-${String(monday.getMonth()+1).padStart(2,'0')}-${String(monday.getDate()).padStart(2,'0')}`;
+}
+function togglePinWeek(id) {
+  const item = data.items.find(i => i.id === id);
+  if (!item) return;
+  const wid = weekIdStr();
+  item.pinned_week = item.pinned_week === wid ? null : wid;
+  persist(); renderAll();
+}
+function removeFromWork(id) {
+  const item = data.items.find(i => i.id === id);
+  if (!item) return;
+  item.pinned_today = null;
+  item.pinned_week = null;
   persist(); renderAll();
 }
 function revertGtdItem(id) {
@@ -1000,7 +1019,8 @@ function buildProjectNodeHtml(node, depth) {
           <button class="action-btn" onclick="moveProjectNode('${node.id}',-1)">위로</button>
           <button class="action-btn" onclick="moveProjectNode('${node.id}',1)">아래로</button>
           <button class="action-btn" onclick="openEditGtdItem('${node.id}')">수정</button>
-          <button class="action-btn" onclick="togglePinToday('${node.id}')">${node.pinned_today === todayStr() ? '오늘 해제' : '오늘 추가'}</button>
+          <button class="action-btn" onclick="togglePinToday('${node.id}')">${node.pinned_today === todayStr() ? '오늘 해제' : '오늘업무 추가'}</button>
+          <button class="action-btn" onclick="togglePinWeek('${node.id}')">${node.pinned_week === weekIdStr() ? '주간 해제' : '주간업무 추가'}</button>
           <button class="action-btn danger" onclick="deleteProjectNode('${node.id}')">삭제</button>
         </div>
       </div>
@@ -1054,7 +1074,16 @@ function renderWorkTab() {
     !(i.deadline_type === 'exact' && i.deadline_value && isDateToday(i.deadline_value))
   );
   const todayItems = [...candidates.filter(i => isDateToday(i.deadline_value)), ...pinnedItems];
-  const weekItems = candidates.filter(i => !isDateToday(i.deadline_value) && isDateThisWeek(i.deadline_value));
+  const todayIds = new Set(todayItems.map(i => i.id));
+  const wid = weekIdStr();
+  const pinnedWeekItems = data.items.filter(i =>
+    i.pinned_week === wid && i.status !== 'done' && !todayIds.has(i.id) &&
+    !(i.deadline_type === 'exact' && i.deadline_value && isDateThisWeek(i.deadline_value))
+  );
+  const weekItems = [
+    ...candidates.filter(i => !isDateToday(i.deadline_value) && isDateThisWeek(i.deadline_value)),
+    ...pinnedWeekItems
+  ];
   const nudges = data.items.filter(i =>
     i.gtd_category === 'waiting' && i.status !== 'done' &&
     isFirstDayOfDeadlineMonth(i) && i.month_nudge_ack_date !== todayStr()
@@ -1104,13 +1133,27 @@ function buildWorkProjectRow(root, count) {
 }
 function buildWorkItemRow(i) {
   const catLabel = GTD_LABELS[i.gtd_category] || '미분류';
-  const metaStr = (i.deadline_type === 'exact' && i.deadline_value) ? `기한: ${i.deadline_value}` : '오늘 추가됨';
+  const pinnedToday = i.pinned_today === todayStr();
+  const pinnedWeek = i.pinned_week === weekIdStr();
+  const metaStr = (i.deadline_type === 'exact' && i.deadline_value) ? `기한: ${i.deadline_value}`
+    : pinnedToday ? '오늘업무로 추가됨'
+    : pinnedWeek ? '주간업무로 추가됨' : '';
+  const panelKey = 'work_' + i.id;
+  const panelVisible = openPanels[panelKey] ? 'visible' : '';
+  const excludeBtn = (pinnedToday || pinnedWeek)
+    ? `<button class="action-btn" onclick="removeFromWork('${i.id}')">업무에서 제외</button>` : '';
   return `
     <li class="item">
       <div class="item-check" onclick="completeGtdItem('${i.id}')"></div>
       <div class="item-body">
-        <div class="item-text">[${catLabel}][${escapeHtml(topicName(i.topic))}] ${escapeHtml(i.text)}</div>
+        <div class="item-text" onclick="togglePanel('${panelKey}')">[${catLabel}][${escapeHtml(topicName(i.topic))}] ${escapeHtml(i.text)}</div>
         <div class="item-meta">${metaStr}</div>
+        <div class="item-panel ${panelVisible}" id="panel-${panelKey}">
+          <div class="item-actions">
+            <button class="action-btn" onclick="openEditGtdItem('${i.id}')">수정</button>
+            ${excludeBtn}
+          </div>
+        </div>
       </div>
     </li>`;
 }
