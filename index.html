@@ -478,7 +478,7 @@ function migrateLegacyItem(old, idx) {
     status,
     waiting_on: null,
     calendar_registered: !!old.calendar_registered,
-    important: !!old.important, grade: old.grade || null,
+    important: !!old.important, grade: old.grade || null, pinned_today: null,
     created_at: old.created_at || new Date().toISOString(),
     completed_at: old.completed_at || null
   };
@@ -655,7 +655,7 @@ function addUnclassifiedItem() {
     deadline_type, deadline_value,
     parent_id: null, order: data.items.length,
     status: 'active', waiting_on: null, calendar_registered: false,
-    important: false, grade: null,
+    important: false, grade: null, pinned_today: null,
     created_at: new Date().toISOString(), completed_at: null
   });
   textEl.value = ''; noteEl.value = '';
@@ -686,6 +686,14 @@ function openClassifyModal(id) {
       <option value="">미분류</option>
       ${topicOptions}
     </select>
+    <div class="field-label">중요도</div>
+    <select id="classify-grade">
+      <option value="" selected>보통</option>
+      <option value="S">🔴 S</option>
+      <option value="A">🟠 A</option>
+      <option value="B">🟡 B</option>
+      <option value="C">⚪ C</option>
+    </select>
     <div class="edit-form-actions">
       <button class="edit-save-btn" onclick="saveClassify()">분류</button>
       <button class="edit-cancel-btn" onclick="closeModal()">취소</button>
@@ -697,6 +705,9 @@ function saveClassify() {
   if (!item) return;
   item.gtd_category = document.getElementById('classify-category').value;
   item.topic = document.getElementById('classify-topic').value || null;
+  const gradeVal = document.getElementById('classify-grade').value;
+  item.important = !!gradeVal;
+  item.grade = gradeVal || null;
   closeModal(); persist(); renderAll();
 }
 function closeModal() {
@@ -748,6 +759,7 @@ function buildGtdItemHtml(i, category) {
         <div class="item-panel" id="panel-${i.id}">
           <div class="item-actions">
             <button class="action-btn" onclick="openEditGtdItem('${i.id}')">수정</button>
+            <button class="action-btn" onclick="togglePinToday('${i.id}')">${i.pinned_today === todayStr() ? '오늘 해제' : '오늘 추가'}</button>
             <button class="action-btn danger" onclick="deleteGtdItem('${i.id}')">삭제</button>
           </div>
         </div>
@@ -784,6 +796,12 @@ function buildGtdDoneItemHtml(i) {
         </div>
       </div>
     </li>`;
+}
+function togglePinToday(id) {
+  const item = data.items.find(i => i.id === id);
+  if (!item) return;
+  item.pinned_today = item.pinned_today === todayStr() ? null : todayStr();
+  persist(); renderAll();
 }
 function revertGtdItem(id) {
   const item = data.items.find(i => i.id === id);
@@ -857,7 +875,7 @@ function addProjectRoot() {
     deadline_type: null, deadline_value: null,
     parent_id: null, order: maxOrder+1,
     status: 'active', waiting_on: null, calendar_registered: false,
-    important: false, grade: null, collapsed: false,
+    important: false, grade: null, pinned_today: null, collapsed: false,
     created_at: new Date().toISOString(), completed_at: null
   });
   textEl.value = '';
@@ -891,7 +909,7 @@ function saveSubTask() {
     deadline_type: null, deadline_value: null,
     parent_id: modalCtx.parentId, order: maxOrder+1,
     status: 'active', waiting_on: null, calendar_registered: false,
-    important: false, grade: null, collapsed: false,
+    important: false, grade: null, pinned_today: null, collapsed: false,
     created_at: new Date().toISOString(), completed_at: null
   });
   parent.collapsed = false; // 추가 시 펼쳐 보이도록
@@ -982,6 +1000,7 @@ function buildProjectNodeHtml(node, depth) {
           <button class="action-btn" onclick="moveProjectNode('${node.id}',-1)">위로</button>
           <button class="action-btn" onclick="moveProjectNode('${node.id}',1)">아래로</button>
           <button class="action-btn" onclick="openEditGtdItem('${node.id}')">수정</button>
+          <button class="action-btn" onclick="togglePinToday('${node.id}')">${node.pinned_today === todayStr() ? '오늘 해제' : '오늘 추가'}</button>
           <button class="action-btn danger" onclick="deleteProjectNode('${node.id}')">삭제</button>
         </div>
       </div>
@@ -1028,8 +1047,13 @@ function isFirstDayOfDeadlineMonth(i) {
 }
 
 function renderWorkTab() {
+  const today = todayStr();
   const candidates = data.items.filter(i => i.deadline_type === 'exact' && i.deadline_value && i.status !== 'done');
-  const todayItems = candidates.filter(i => isDateToday(i.deadline_value));
+  const pinnedItems = data.items.filter(i =>
+    i.pinned_today === today && i.status !== 'done' &&
+    !(i.deadline_type === 'exact' && i.deadline_value && isDateToday(i.deadline_value))
+  );
+  const todayItems = [...candidates.filter(i => isDateToday(i.deadline_value)), ...pinnedItems];
   const weekItems = candidates.filter(i => !isDateToday(i.deadline_value) && isDateThisWeek(i.deadline_value));
   const nudges = data.items.filter(i =>
     i.gtd_category === 'waiting' && i.status !== 'done' &&
@@ -1080,12 +1104,13 @@ function buildWorkProjectRow(root, count) {
 }
 function buildWorkItemRow(i) {
   const catLabel = GTD_LABELS[i.gtd_category] || '미분류';
+  const metaStr = (i.deadline_type === 'exact' && i.deadline_value) ? `기한: ${i.deadline_value}` : '오늘 추가됨';
   return `
     <li class="item">
       <div class="item-check" onclick="completeGtdItem('${i.id}')"></div>
       <div class="item-body">
         <div class="item-text">[${catLabel}][${escapeHtml(topicName(i.topic))}] ${escapeHtml(i.text)}</div>
-        <div class="item-meta">기한: ${i.deadline_value}</div>
+        <div class="item-meta">${metaStr}</div>
       </div>
     </li>`;
 }
