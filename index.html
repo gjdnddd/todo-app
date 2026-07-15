@@ -1088,14 +1088,41 @@ function renderWorkTab() {
     i.gtd_category === 'waiting' && i.status !== 'done' &&
     isFirstDayOfDeadlineMonth(i) && i.month_nudge_ack_date !== todayStr()
   );
-  renderWorkGroup('work-today', todayItems, nudges);
-  renderWorkGroup('work-week', weekItems, []);
+  const checklistRows = buildWorkChecklistRows();
+  renderWorkGroup('work-today', todayItems, nudges, checklistRows);
+  renderWorkGroup('work-week', weekItems, [], []);
 }
 
-function renderWorkGroup(prefix, items, nudges) {
+/* 업무세트(체크리스트, 매일 리셋)의 미완료 하위항목을 오늘업무 행으로 변환.
+   체크하면 해당 세트의 checked_today에 들어가 당일은 목록에서 사라진다(자정 리셋 시 재등장). */
+function buildWorkChecklistRows() {
+  checkResetChecklistSets();
+  const rows = [];
+  data.checklist_sets.forEach(cs => {
+    const remaining = cs.items
+      .filter(it => !cs.checked_today.includes(it.id))
+      .sort((a, b) => a.order - b.order);
+    remaining.forEach(it => {
+      rows.push(`
+        <li class="item">
+          <div class="item-check" onclick="checkWorkChecklistItem('${cs.id}','${it.id}')"></div>
+          <div class="item-body">
+            <div class="item-text">[반복업무세트][${escapeHtml(cs.title)}] ${escapeHtml(it.text)}</div>
+          </div>
+        </li>`);
+    });
+  });
+  return rows;
+}
+function checkWorkChecklistItem(setId, itemId) {
+  toggleChecklistSubItem(setId, itemId);
+  renderWorkTab();
+}
+
+function renderWorkGroup(prefix, items, nudges, extraRows) {
   const listEl = document.getElementById('list-' + prefix);
   const countEl = document.getElementById('count-' + prefix);
-  const totalCount = items.length + (nudges ? nudges.length : 0);
+  const totalCount = items.length + (nudges ? nudges.length : 0) + (extraRows ? extraRows.length : 0);
   if (!totalCount) {
     countEl.textContent = '';
     listEl.innerHTML = '<div class="empty-hint">없음</div>';
@@ -1118,6 +1145,7 @@ function renderWorkGroup(prefix, items, nudges) {
   projectGroups.forEach(({ root, count }) => rows.push(buildWorkProjectRow(root, count)));
   standalone.forEach(i => rows.push(buildWorkItemRow(i)));
   (nudges || []).forEach(i => rows.push(buildWorkNudgeRow(i)));
+  (extraRows || []).forEach(r => rows.push(r));
 
   countEl.textContent = `(${rows.length})`;
   listEl.innerHTML = rows.join('');
