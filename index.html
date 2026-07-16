@@ -231,6 +231,10 @@
     <div class="section-header"><span class="section-title">주간업무</span><span class="section-count" id="count-work-week"></span></div>
     <ul class="item-list" id="list-work-week"></ul>
   </div>
+  <div class="section">
+    <div class="section-header"><span class="section-title">반복업무</span><span class="section-count" id="count-work-checklist"></span></div>
+    <div id="list-work-checklist"></div>
+  </div>
 </div>
 
 <!-- ══════════ GTD 탭 ══════════ -->
@@ -1088,31 +1092,60 @@ function renderWorkTab() {
     i.gtd_category === 'waiting' && i.status !== 'done' &&
     isFirstDayOfDeadlineMonth(i) && i.month_nudge_ack_date !== todayStr()
   );
-  const checklistRows = buildWorkChecklistRows();
-  renderWorkGroup('work-today', todayItems, nudges, checklistRows);
-  renderWorkGroup('work-week', weekItems, [], []);
+  /* 단일 반복업무(매일/매주/격주/매월)는 활성 상태면 전부 주간업무에 편입 */
+  const activeRecurringRows = data.recurring
+    .filter(r => r.status === 'active')
+    .map(r => buildWorkRecurringItemRow(r));
+
+  renderWorkGroup('work-today', todayItems, nudges, []);
+  renderWorkGroup('work-week', weekItems, [], activeRecurringRows);
+  renderWorkChecklistSection();
 }
 
-/* 업무세트(체크리스트, 매일 리셋)의 미완료 하위항목을 오늘업무 행으로 변환.
-   체크하면 해당 세트의 checked_today에 들어가 당일은 목록에서 사라진다(자정 리셋 시 재등장). */
-function buildWorkChecklistRows() {
-  checkResetChecklistSets();
-  const rows = [];
-  data.checklist_sets.forEach(cs => {
-    const remaining = cs.items
-      .filter(it => !cs.checked_today.includes(it.id))
-      .sort((a, b) => a.order - b.order);
-    remaining.forEach(it => {
-      rows.push(`
-        <li class="item">
-          <div class="item-check" onclick="checkWorkChecklistItem('${cs.id}','${it.id}')"></div>
-          <div class="item-body">
-            <div class="item-text">[반복업무세트][${escapeHtml(cs.title)}] ${escapeHtml(it.text)}</div>
+function buildWorkRecurringItemRow(r) {
+  const panelKey = 'workrec_' + r.id;
+  const panelVisible = openPanels[panelKey] ? 'visible' : '';
+  return `
+    <li class="item">
+      <div class="item-check" onclick="completeRecItem('${r.id}')"></div>
+      <div class="item-body">
+        <div class="item-text" onclick="togglePanel('${panelKey}')">[반복업무] ${escapeHtml(r.text)}</div>
+        <div class="item-meta">${freqLabel(r)}</div>
+        <div class="item-panel ${panelVisible}" id="panel-${panelKey}">
+          <div class="item-actions">
+            <button class="action-btn" onclick="openEditRecItem('${r.id}')">수정</button>
+            <button class="action-btn" onclick="skipRecItem('${r.id}')">스킵</button>
           </div>
-        </li>`);
-    });
-  });
-  return rows;
+        </div>
+      </div>
+    </li>`;
+}
+
+/* 업무세트(체크리스트, 매일 리셋)를 그룹(제목+하위항목) 그대로 "반복업무" 섹션에 표시.
+   하위항목 체크 시 checked_today에 들어가 당일 목록에서 사라지고, 세트 전체가 완료되면 세트도 안 보인다.
+   자정 리셋 시 전부 재등장. */
+function renderWorkChecklistSection() {
+  checkResetChecklistSets();
+  const container = document.getElementById('list-work-checklist');
+  const countEl = document.getElementById('count-work-checklist');
+  const setsWithRemaining = data.checklist_sets
+    .map(cs => ({ cs, remaining: cs.items.filter(it => !cs.checked_today.includes(it.id)).sort((a, b) => a.order - b.order) }))
+    .filter(x => x.remaining.length > 0);
+  if (!setsWithRemaining.length) {
+    countEl.textContent = '';
+    container.innerHTML = '<div class="empty-hint">없음</div>';
+    return;
+  }
+  countEl.textContent = `(${setsWithRemaining.length})`;
+  container.innerHTML = setsWithRemaining.map(({ cs, remaining }) => `
+    <div class="checklist-set">
+      <div class="checklist-set-title">${escapeHtml(cs.title)} (${cs.items.length - remaining.length}/${cs.items.length})</div>
+      ${remaining.map(it => `
+        <div class="checklist-sub-item">
+          <div class="checklist-sub-check" onclick="checkWorkChecklistItem('${cs.id}','${it.id}')"></div>
+          <span class="checklist-sub-text">${escapeHtml(it.text)}</span>
+        </div>`).join('')}
+    </div>`).join('');
 }
 function checkWorkChecklistItem(setId, itemId) {
   toggleChecklistSubItem(setId, itemId);
