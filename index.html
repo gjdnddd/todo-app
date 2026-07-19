@@ -179,6 +179,7 @@
   .tree-deadline { font-size: 11px; color: var(--accent); white-space: nowrap; }
   .tree-child-count { font-size: 12px; color: var(--text-sub); }
   .tree-node .item-panel { padding-bottom: 6px; }
+  .tree-node.done > .tree-row .tree-text { text-decoration: line-through; color: var(--text-sub); }
 </style>
 </head>
 <body>
@@ -393,6 +394,7 @@ const GCP_WRITE_URL = 'https://asia-northeast3-infin-stock-bot.cloudfunctions.ne
 const API_KEY        = 'tZrCvMfEa16iuQdFcnmGyDASHk9l5h3q0oK2xTbLY4wVWpjR';
 const LS_KEY          = 'todo_v2_data';
 const LS_DEL_KEY      = 'todo_v2_pending_del';
+const LS_SYNC_WATERMARK_KEY = 'todo_v2_sync_watermark';
 const DAYS_KO = ['일','월','화','수','목','금','토'];
 const GTD_LABELS = { next_action: '다음행동', project: '프로젝트', waiting: '대기중', calendar: '캘린더', someday: '언젠가', memo: '메모' };
 const GRADE_EMOJI = { S: '🔴', A: '🟠', B: '🟡', C: '⚪' };
@@ -452,6 +454,16 @@ function loadPendingDel() {
   } catch { /* 무시 */ }
 }
 function savePendingDel() { localStorage.setItem(LS_DEL_KEY, JSON.stringify(pendingDel)); }
+
+/* 이 기기가 서버와 마지막으로 성공 동기화한 시점(서버 updated_at 기준).
+   기기 간 삭제 부활 방지용 — 이 시점 이전에 생성된 항목이 서버에 없으면
+   "다른 기기에서 삭제됨"으로 간주하고 되살리지 않는다. */
+function getSyncWatermark() {
+  return localStorage.getItem(LS_SYNC_WATERMARK_KEY);
+}
+function setSyncWatermark(iso) {
+  if (iso) localStorage.setItem(LS_SYNC_WATERMARK_KEY, iso);
+}
 
 /* mutation 발생 시 공통으로 호출: 로컬 즉시 반영 + 백그라운드 서버 동기화 */
 function persist() { saveLocal(); saveToServer(); }
@@ -513,11 +525,18 @@ async function loadFromServer() {
     serverData.recurring = (serverData.recurring || []).filter(r => !delRecurring.has(r.id));
     serverData.checklist_sets = (serverData.checklist_sets || []).filter(c => !delChecklist.has(c.id));
 
-    /* localStorage 미동기화 항목 병합 (서버에 없는 로컬 항목은 서버보다 최신일 수 있음) */
+    /* localStorage 미동기화 "신규" 항목만 병합.
+       마지막 동기화 시점(watermark) 이전에 생성된 항목이 서버에 없다면, 그건 신규가 아니라
+       "다른 기기에서 삭제됨"인 경우이므로 되살리지 않는다 — 기기 간 삭제 부활 버그 방지. */
+    const watermark = getSyncWatermark();
     const local = loadLocal();
     if (local && local.items) {
       const serverIds = new Set(serverData.items.map(i => i.id));
-      const localOnly = local.items.filter(i => !serverIds.has(i.id));
+      const localOnly = local.items.filter(i => {
+        if (serverIds.has(i.id)) return false;
+        if (!watermark) return false; // 워터마크 없으면(첫 실행 등) 안전하게 되살리지 않음
+        return i.created_at && i.created_at > watermark;
+      });
       if (localOnly.length > 0) {
         serverData.items = [...serverData.items, ...localOnly];
         needsWriteBack = true;
@@ -530,6 +549,7 @@ async function loadFromServer() {
       updated_at: serverData.updated_at || null, last_processed_at: serverData.last_processed_at || null
     };
     saveLocal();
+    setSyncWatermark(data.updated_at || new Date().toISOString());
     renderAll();
     setStatus(needsWriteBack ? '마이그레이션 반영 중...' : '');
     if (needsWriteBack) await saveToServer(true);
@@ -553,8 +573,10 @@ async function saveToServer(silent) {
       })
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const result = await res.json();
     pendingDel = { items: [], recurring: [], checklist_sets: [] };
     savePendingDel();
+    setSyncWatermark(result.updated_at || new Date().toISOString());
     if (!silent) setStatus('');
   } catch (err) {
     setStatus('서버 저장 실패 — 로컬에는 반영됨, 재시도 필요', true);
@@ -856,6 +878,12 @@ function getChildren(parentId) {
     .filter(i => i.parent_id === parentId && i.status !== 'done')
     .sort((a,b) => (a.order||0) - (b.order||0));
 }
+/* 완료 포함 전체 하위작업(정렬됨) — 프로젝트 트리는 완료돼도 구조를 유지해야 하므로 이걸 씀 */
+function getChildrenAll(parentId) {
+  return data.items
+    .filter(i => i.parent_id === parentId)
+    .sort((a,b) => (a.order||0) - (b.order||0));
+}
 /* 모든 하위(상태 무관, 재귀) — 완료/삭제 전파용 */
 function getAllDescendants(id) {
   let result = [];
@@ -924,7 +952,7 @@ function saveSubTask() {
   if (!parent) return;
   const text = document.getElementById('subtask-text').value.trim();
   if (!text) return;
-  const siblings = getChildren(modalCtx.parentId);
+  const siblings = getChildrenAll(modalCtx.parentId);
   const maxOrder = siblings.reduce((m,s) => Math.max(m, s.order||0), -1);
   data.items.push({
     id: genId(), text, note: null,
@@ -942,6 +970,12 @@ function saveSubTask() {
 function completeProjectNode(id) {
   const node = data.items.find(i => i.id === id);
   if (!node) return;
+  if (node.status === 'done') {
+    /* 완료 표시 다시 누르면 되돌리기 (하위는 건드리지 않음) */
+    node.status = 'active'; node.completed_at = null;
+    persist(); renderAll();
+    return;
+  }
   const activeDesc = getAllDescendants(id).filter(d => d.status !== 'done');
   if (activeDesc.length && !confirm(`하위 ${activeDesc.length}개 항목도 함께 완료됩니다. 계속할까요?`)) return;
   const now = new Date().toISOString();
@@ -981,7 +1015,7 @@ function renderProjectTree() {
   refreshProjectTopicSelect();
   const container = document.getElementById('list-project');
   if (!container) return;
-  const roots = data.items.filter(i => i.gtd_category === 'project' && i.parent_id == null && i.status !== 'done');
+  const roots = data.items.filter(i => i.gtd_category === 'project' && i.parent_id == null);
   if (!roots.length) { container.innerHTML = '<div class="empty-hint">프로젝트 없음</div>'; return; }
   const grouped = {};
   roots.forEach(i => { const key = i.topic || '__none__'; (grouped[key] = grouped[key] || []).push(i); });
@@ -995,7 +1029,8 @@ function renderProjectTree() {
   container.innerHTML = html;
 }
 function buildProjectNodeHtml(node, depth) {
-  const children = getChildren(node.id);
+  const isDone = node.status === 'done';
+  const children = getChildrenAll(node.id);
   const hasChildren = children.length > 0;
   const collapsed = !!node.collapsed;
   const panelVisible = openPanels[node.id] ? 'visible' : '';
@@ -1009,10 +1044,10 @@ function buildProjectNodeHtml(node, depth) {
   const childCount = hasChildren ? ` <span class="tree-child-count">(${children.length})</span>` : '';
   const childrenHtml = (hasChildren && !collapsed) ? children.map(c => buildProjectNodeHtml(c, depth+1)).join('') : '';
   return `
-    <div class="tree-node" id="node-${node.id}">
+    <div class="tree-node${isDone ? ' done' : ''}" id="node-${node.id}">
       <div class="tree-row" style="padding-left:${10 + depth*18}px">
         ${toggle}
-        <div class="item-check" onclick="completeProjectNode('${node.id}')"></div>
+        <div class="item-check ${isDone ? 'done' : ''}" onclick="completeProjectNode('${node.id}')">${isDone ? '✓' : ''}</div>
         ${badge}
         <span class="tree-text" onclick="togglePanel('${node.id}')">${escapeHtml(node.text)}${childCount}${deadline}</span>
       </div>
