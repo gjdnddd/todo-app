@@ -1140,6 +1140,7 @@ function renderWorkTab() {
 function buildWorkRecurringItemRow(r) {
   const panelKey = 'workrec_' + r.id;
   const panelVisible = openPanels[panelKey] ? 'visible' : '';
+  const noteStr = r.note ? `<div class="item-note">${escapeHtml(r.note)}</div>` : '';
   return `
     <li class="item">
       <div class="item-check" onclick="completeRecItem('${r.id}')"></div>
@@ -1147,6 +1148,7 @@ function buildWorkRecurringItemRow(r) {
         <div class="item-text" onclick="togglePanel('${panelKey}')">[반복업무] ${escapeHtml(r.text)}</div>
         <div class="item-meta">${freqLabel(r)}</div>
         <div class="item-panel ${panelVisible}" id="panel-${panelKey}">
+          ${noteStr}
           <div class="item-actions">
             <button class="action-btn" onclick="openEditRecItem('${r.id}')">수정</button>
             <button class="action-btn" onclick="skipRecItem('${r.id}')">스킵</button>
@@ -1234,6 +1236,9 @@ function buildWorkItemRow(i) {
   const metaStr = (i.deadline_type === 'exact' && i.deadline_value) ? `기한: ${i.deadline_value}`
     : pinnedToday ? '오늘업무로 추가됨'
     : pinnedWeek ? '주간업무로 추가됨' : '';
+  const badge = i.important ? `<span class="grade-badge">${GRADE_EMOJI[i.grade] || '❗'}</span>` : '';
+  const noteStr = i.note ? `<div class="item-note">${escapeHtml(i.note)}</div>` : '';
+  const waitingStr = i.gtd_category === 'waiting' && i.waiting_on ? `<div class="item-note">대기: ${escapeHtml(i.waiting_on)}</div>` : '';
   const panelKey = 'work_' + i.id;
   const panelVisible = openPanels[panelKey] ? 'visible' : '';
   const excludeBtn = (pinnedToday || pinnedWeek)
@@ -1241,10 +1246,12 @@ function buildWorkItemRow(i) {
   return `
     <li class="item">
       <div class="item-check" onclick="completeGtdItem('${i.id}')"></div>
+      ${badge}
       <div class="item-body">
         <div class="item-text" onclick="togglePanel('${panelKey}')">[${catLabel}][${escapeHtml(topicName(i.topic))}] ${escapeHtml(i.text)}</div>
         <div class="item-meta">${metaStr}</div>
         <div class="item-panel ${panelVisible}" id="panel-${panelKey}">
+          ${noteStr}${waitingStr}
           <div class="item-actions">
             <button class="action-btn" onclick="openEditGtdItem('${i.id}')">수정</button>
             ${excludeBtn}
