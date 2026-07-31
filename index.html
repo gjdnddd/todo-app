@@ -281,15 +281,15 @@
     </div>
 
     <div class="section">
-      <div class="section-header">
-        <span class="section-title">등록된 반복업무 전체</span><span class="section-count" id="count-rec-all"></span>
-      </div>
-      <ul class="item-list" id="list-rec-all"></ul>
+      <div class="section-header"><span class="section-title">활성 반복업무</span><span class="section-count" id="count-rec-active"></span></div>
+      <ul class="item-list" id="list-rec-active"></ul>
     </div>
 
     <div class="section">
-      <div class="section-header"><span class="section-title">활성 반복업무</span><span class="section-count" id="count-rec-active"></span></div>
-      <ul class="item-list" id="list-rec-active"></ul>
+      <div class="section-header" onclick="toggleRecAllSection()">
+        <span class="section-title">등록된 반복업무 전체</span><span class="section-count" id="count-rec-all"></span>
+      </div>
+      <ul class="item-list hidden-field" id="list-rec-all"></ul>
     </div>
 
     <div class="section">
@@ -1612,6 +1612,9 @@ function renderRecurring() {
 
 /* 상태(활성/대기/완료) 상관없이 등록된 반복업무 전부를 보여준다.
    idle 상태(다음 활성화일 전)는 활성 목록엔 안 뜨므로, 추가 직후 확인할 방법이 이거밖에 없다. */
+function toggleRecAllSection() {
+  document.getElementById('list-rec-all').classList.toggle('hidden-field');
+}
 function renderRecurringAll() {
   const countEl = document.getElementById('count-rec-all');
   const listEl = document.getElementById('list-rec-all');
@@ -1623,11 +1626,19 @@ function renderRecurringAll() {
   countEl.textContent = `(${data.recurring.length})`;
   listEl.innerHTML = data.recurring.map(r => {
     const statusLabel = r.status === 'active' ? '🟢 활성' : r.status === 'done' ? '✅ 완료' : '⚪ 대기 중';
+    const panelKey = 'recall_' + r.id;
+    const panelVisible = openPanels[panelKey] ? 'visible' : '';
     return `
       <li class="item">
         <div class="item-body">
-          <div class="item-text">${escapeHtml(r.text)}</div>
+          <div class="item-text" onclick="togglePanel('${panelKey}')">${escapeHtml(r.text)}</div>
           <div class="item-meta">${statusLabel} · ${freqLabel(r)}</div>
+          <div class="item-panel ${panelVisible}" id="panel-${panelKey}">
+            <div class="item-actions">
+              <button class="action-btn" onclick="openEditRecItem('${r.id}')">수정</button>
+              <button class="action-btn danger" onclick="deleteRecItem('${r.id}')">삭제</button>
+            </div>
+          </div>
         </div>
       </li>`;
   }).join('');
