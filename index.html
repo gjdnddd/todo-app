@@ -1114,16 +1114,17 @@ function isFirstDayOfDeadlineMonth(i) {
 
 function renderWorkTab() {
   const today = todayStr();
-  const candidates = data.items.filter(i => i.deadline_type === 'exact' && i.deadline_value && i.status !== 'done');
+  /* 프로젝트 항목은 별도 카드 로직(완료돼도 전체완료 전까지 유지)으로 처리하므로 여기선 제외 */
+  const candidates = data.items.filter(i => i.gtd_category !== 'project' && i.deadline_type === 'exact' && i.deadline_value && i.status !== 'done');
   const pinnedItems = data.items.filter(i =>
-    i.pinned_today === today && i.status !== 'done' &&
+    i.gtd_category !== 'project' && i.pinned_today === today && i.status !== 'done' &&
     !(i.deadline_type === 'exact' && i.deadline_value && isDateToday(i.deadline_value))
   );
   const todayItems = [...candidates.filter(i => isDateToday(i.deadline_value)), ...pinnedItems];
   const todayIds = new Set(todayItems.map(i => i.id));
   const wid = weekIdStr();
   const pinnedWeekItems = data.items.filter(i =>
-    i.pinned_week === wid && i.status !== 'done' && !todayIds.has(i.id) &&
+    i.gtd_category !== 'project' && i.pinned_week === wid && i.status !== 'done' && !todayIds.has(i.id) &&
     !(i.deadline_type === 'exact' && i.deadline_value && isDateThisWeek(i.deadline_value))
   );
   const weekItems = [
@@ -1139,9 +1140,69 @@ function renderWorkTab() {
     .filter(r => r.status === 'active')
     .map(r => buildWorkRecurringItemRow(r));
 
-  renderWorkGroup('work-today', todayItems, nudges, []);
-  renderWorkGroup('work-week', weekItems, [], activeRecurringRows);
+  /* 프로젝트 카드: 넣은 항목 + 그 자손 전부 포함, 개별 체크(cascade 없음),
+     포함된 항목이 전부 완료돼야 카드가 사라진다(완료된 항목은 체크마크로 유지). */
+  const todaySeeds = getProjectSeedsForToday(today);
+  const todaySeedIds = new Set(todaySeeds.map(s => s.id));
+  const weekSeeds = getProjectSeedsForWeek(wid, todaySeedIds);
+  const todayProjectRows = buildProjectWorkGroups(todaySeeds).map(g => buildWorkProjectCard(g.root, g.items));
+  const weekProjectRows = buildProjectWorkGroups(weekSeeds).map(g => buildWorkProjectCard(g.root, g.items));
+
+  renderWorkGroup('work-today', todayItems, nudges, todayProjectRows);
+  renderWorkGroup('work-week', weekItems, [], [...activeRecurringRows, ...weekProjectRows]);
   renderWorkChecklistSection();
+}
+
+/* 오늘/이번주 조건(데드라인 또는 수동추가)에 걸린 프로젝트 항목을 찾는다.
+   완료 여부와 무관하게 포함시켜야 "전부 완료돼야 카드가 사라짐"이 성립한다. */
+function getProjectSeedsForToday(today) {
+  return data.items.filter(i =>
+    i.gtd_category === 'project' &&
+    ((i.deadline_type === 'exact' && i.deadline_value && isDateToday(i.deadline_value)) ||
+     i.pinned_today === today)
+  );
+}
+function getProjectSeedsForWeek(wid, excludeIds) {
+  return data.items.filter(i =>
+    i.gtd_category === 'project' && !excludeIds.has(i.id) &&
+    ((i.deadline_type === 'exact' && i.deadline_value && !isDateToday(i.deadline_value) && isDateThisWeek(i.deadline_value)) ||
+     i.pinned_week === wid)
+  );
+}
+/* seed 항목 + 그 자손(완료 포함)을 루트 프로젝트 단위로 묶는다. 전부 완료된 그룹은 제외. */
+function buildProjectWorkGroups(seeds) {
+  const groups = new Map(); // rootId -> { root, itemIds:Set }
+  seeds.forEach(seed => {
+    const root = findProjectRoot(seed);
+    const g = groups.get(root.id) || { root, itemIds: new Set() };
+    g.itemIds.add(seed.id);
+    getAllDescendants(seed.id).forEach(d => g.itemIds.add(d.id));
+    groups.set(root.id, g);
+  });
+  const result = [];
+  groups.forEach(g => {
+    const items = Array.from(g.itemIds).map(id => data.items.find(i => i.id === id)).filter(Boolean);
+    const allDone = items.every(i => i.status === 'done');
+    if (!allDone) result.push({ root: g.root, items });
+  });
+  return result;
+}
+function buildWorkProjectCard(root, items) {
+  const sorted = items.slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+  const doneCount = sorted.filter(i => i.status === 'done').length;
+  return `
+    <div class="checklist-set">
+      <div class="checklist-set-title" onclick="jumpToProject('${root.id}')" style="cursor:pointer">[프로젝트][${escapeHtml(topicName(root.topic))}] ${escapeHtml(root.text)} (${doneCount}/${sorted.length})</div>
+      ${sorted.map(it => {
+        const isDone = it.status === 'done';
+        const checkOnclick = isDone ? '' : ` onclick="completeGtdItem('${it.id}')"`;
+        return `
+        <div class="checklist-sub-item">
+          <div class="checklist-sub-check ${isDone ? 'done' : ''}"${checkOnclick}>${isDone ? '✓' : ''}</div>
+          <span class="checklist-sub-text ${isDone ? 'done' : ''}">${escapeHtml(it.text)}</span>
+        </div>`;
+      }).join('')}
+    </div>`;
 }
 
 function buildWorkRecurringItemRow(r) {
@@ -1166,30 +1227,36 @@ function buildWorkRecurringItemRow(r) {
 }
 
 /* 업무세트(체크리스트, 매일 리셋)를 그룹(제목+하위항목) 그대로 "반복업무" 섹션에 표시.
-   하위항목 체크 시 checked_today에 들어가 당일 목록에서 사라지고, 세트 전체가 완료되면 세트도 안 보인다.
+   체크한 항목도 안 사라지고 체크마크로 남는다 — 세트의 모든 항목이 다 체크돼야 세트 전체가 사라진다.
    자정 리셋 시 전부 재등장. */
 function renderWorkChecklistSection() {
   checkResetChecklistSets();
   const container = document.getElementById('list-work-checklist');
   const countEl = document.getElementById('count-work-checklist');
-  const setsWithRemaining = data.checklist_sets
-    .map(cs => ({ cs, remaining: cs.items.filter(it => !cs.checked_today.includes(it.id)).sort((a, b) => a.order - b.order) }))
-    .filter(x => x.remaining.length > 0);
-  if (!setsWithRemaining.length) {
+  const setsInProgress = data.checklist_sets
+    .map(cs => ({ cs, sorted: [...cs.items].sort((a, b) => a.order - b.order) }))
+    .filter(x => x.sorted.some(it => !x.cs.checked_today.includes(it.id)));
+  if (!setsInProgress.length) {
     countEl.textContent = '';
     container.innerHTML = '<div class="empty-hint">없음</div>';
     return;
   }
-  countEl.textContent = `(${setsWithRemaining.length})`;
-  container.innerHTML = setsWithRemaining.map(({ cs, remaining }) => `
+  countEl.textContent = `(${setsInProgress.length})`;
+  container.innerHTML = setsInProgress.map(({ cs, sorted }) => {
+    const doneCount = cs.checked_today.length;
+    return `
     <div class="checklist-set">
-      <div class="checklist-set-title">${escapeHtml(cs.title)} (${cs.items.length - remaining.length}/${cs.items.length})</div>
-      ${remaining.map(it => `
+      <div class="checklist-set-title">${escapeHtml(cs.title)} (${doneCount}/${cs.items.length})</div>
+      ${sorted.map(it => {
+        const isChecked = cs.checked_today.includes(it.id);
+        return `
         <div class="checklist-sub-item">
-          <div class="checklist-sub-check" onclick="checkWorkChecklistItem('${cs.id}','${it.id}')"></div>
-          <span class="checklist-sub-text">${escapeHtml(it.text)}</span>
-        </div>`).join('')}
-    </div>`).join('');
+          <div class="checklist-sub-check ${isChecked ? 'done' : ''}" onclick="checkWorkChecklistItem('${cs.id}','${it.id}')">${isChecked ? '✓' : ''}</div>
+          <span class="checklist-sub-text ${isChecked ? 'done' : ''}">${escapeHtml(it.text)}</span>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }).join('');
 }
 function checkWorkChecklistItem(setId, itemId) {
   toggleChecklistSubItem(setId, itemId);
@@ -1205,22 +1272,8 @@ function renderWorkGroup(prefix, items, nudges, extraRows) {
     listEl.innerHTML = '<div class="empty-hint">없음</div>';
     return;
   }
-  const projectGroups = new Map(); // rootId -> { root, count }
-  const standalone = [];
-  items.forEach(i => {
-    if (i.gtd_category === 'project') {
-      const root = findProjectRoot(i);
-      const g = projectGroups.get(root.id) || { root, count: 0 };
-      g.count += 1;
-      projectGroups.set(root.id, g);
-    } else {
-      standalone.push(i);
-    }
-  });
-
   const rows = [];
-  projectGroups.forEach(({ root, count }) => rows.push(buildWorkProjectRow(root, count)));
-  standalone.forEach(i => rows.push(buildWorkItemRow(i)));
+  items.forEach(i => rows.push(buildWorkItemRow(i)));
   (nudges || []).forEach(i => rows.push(buildWorkNudgeRow(i)));
   (extraRows || []).forEach(r => rows.push(r));
 
@@ -1228,14 +1281,6 @@ function renderWorkGroup(prefix, items, nudges, extraRows) {
   listEl.innerHTML = rows.join('');
 }
 
-function buildWorkProjectRow(root, count) {
-  return `
-    <li class="item">
-      <div class="item-body">
-        <div class="item-text" onclick="jumpToProject('${root.id}')">[프로젝트][${escapeHtml(topicName(root.topic))}] ${escapeHtml(root.text)} (${count})</div>
-      </div>
-    </li>`;
-}
 function buildWorkItemRow(i) {
   const catLabel = GTD_LABELS[i.gtd_category] || '미분류';
   const pinnedToday = i.pinned_today === todayStr();
