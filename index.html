@@ -1401,7 +1401,7 @@ function addRecurringItem() {
     status: 'idle', last_done_at: null, last_activated_at: null, activated_at: null, skipped: false
   });
   textEl.value = ''; noteEl.value = '';
-  persist(); renderRecurring();
+  persist(); renderAll();
 }
 
 function openEditRecItem(id) {
@@ -1450,7 +1450,7 @@ function saveEditRecItem() {
   r.freq = document.getElementById('edit-rec-freq').value;
   r.day_of_week = (r.freq === 'weekly' || r.freq === 'biweekly') ? parseInt(document.getElementById('edit-rec-dow').value,10) : null;
   r.day_of_month = r.freq === 'monthly' ? parseInt(document.getElementById('edit-rec-dom').value,10) : null;
-  closeModal(); persist(); renderRecurring();
+  closeModal(); persist(); renderAll();
 }
 
 function lastOccurrence(dow) {
@@ -1506,24 +1506,24 @@ function freqLabel(r) {
 function completeRecItem(id) {
   const r = data.recurring.find(x => x.id === id); if (!r) return;
   r.status = 'done'; r.last_done_at = new Date().toISOString(); r.skipped = false;
-  persist(); renderRecurring();
+  persist(); renderAll();
 }
 function skipRecItem(id) {
   const r = data.recurring.find(x => x.id === id); if (!r) return;
   r.status = 'done'; r.last_done_at = new Date().toISOString(); r.skipped = true;
-  persist(); renderRecurring();
+  persist(); renderAll();
 }
 function revertRecItem(id) {
   const r = data.recurring.find(x => x.id === id); if (!r) return;
   r.status = 'active'; r.last_done_at = null; r.skipped = false;
-  persist(); renderRecurring();
+  persist(); renderAll();
 }
 function deleteRecItem(id) {
   if (!confirm('삭제할까요?')) return;
   data.recurring = data.recurring.filter(x => x.id !== id);
   if (!pendingDel.recurring.includes(id)) pendingDel.recurring.push(id);
   savePendingDel();
-  persist(); renderRecurring();
+  persist(); renderAll();
 }
 function renderRecurring() {
   checkRecActivation();
