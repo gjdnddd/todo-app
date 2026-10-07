@@ -265,14 +265,11 @@
           <option value="biweekly">격주</option>
           <option value="monthly">매월</option>
         </select>
-        <select id="rec-add-dow">
-          <option value="0">일요일</option><option value="1">월요일</option><option value="2">화요일</option>
-          <option value="3">수요일</option><option value="4">목요일</option><option value="5">금요일</option><option value="6">토요일</option>
-        </select>
-        <select id="rec-add-dom" class="hidden-field">
-          <option value="0">말일</option>
-          <script>document.write(Array.from({length:31},(_,i)=>`<option value="${i+1}">${i+1}일</option>`).join(''))</script>
-        </select>
+        <div id="rec-add-start-wrap" class="hidden-field">
+          <div class="field-label">시작일 — 이 날짜부터 주기대로 반복돼요 (매주 7일 / 격주 14일 / 매월 같은 일)</div>
+          <input type="date" id="rec-add-start" />
+          <label id="rec-add-eom-wrap" class="hidden-field"><input type="checkbox" id="rec-add-eom" /> 매월 말일에 반복 (시작일 이후 첫 말일부터)</label>
+        </div>
         <div class="edit-form-actions">
           <button class="edit-save-btn" onclick="addRecurringItem()">추가</button>
           <button class="edit-cancel-btn" onclick="toggleAddRecurringForm()">취소</button>
@@ -1440,8 +1437,10 @@ function saveEditGtdItem() {
 ════════════════════════════════════════ */
 function onRecFreqChange() {
   const freq = document.getElementById('rec-add-freq').value;
-  document.getElementById('rec-add-dow').classList.toggle('hidden-field', freq === 'monthly' || freq === 'daily');
-  document.getElementById('rec-add-dom').classList.toggle('hidden-field', freq !== 'monthly');
+  document.getElementById('rec-add-start-wrap').classList.toggle('hidden-field', freq === 'daily');
+  document.getElementById('rec-add-eom-wrap').classList.toggle('hidden-field', freq !== 'monthly');
+  const startEl = document.getElementById('rec-add-start');
+  if (freq !== 'daily' && !startEl.value) startEl.value = todayStr();
 }
 function toggleAddRecurringForm() {
   document.getElementById('add-recurring-form').classList.toggle('hidden-field');
@@ -1452,12 +1451,18 @@ function addRecurringItem() {
   const text = textEl.value.trim();
   if (!text) { textEl.focus(); return; }
   const freq = document.getElementById('rec-add-freq').value;
+  const start = freq === 'daily' ? '' : document.getElementById('rec-add-start').value;
+  if (freq !== 'daily' && !start) { setStatus('시작일을 입력해주세요', true); return; }
+  const startDate = start ? recParseYmd(start) : null;
+  const eom = freq === 'monthly' && document.getElementById('rec-add-eom').checked;
   data.recurring.push({
     id: genId(), text, note: noteEl.value.trim() || null, freq,
-    day_of_week: (freq === 'weekly' || freq === 'biweekly') ? parseInt(document.getElementById('rec-add-dow').value,10) : null,
-    day_of_month: freq === 'monthly' ? parseInt(document.getElementById('rec-add-dom').value,10) : null,
+    start_date: start || null,
+    day_of_week: (freq === 'weekly' || freq === 'biweekly') ? startDate.getDay() : null,
+    day_of_month: freq === 'monthly' ? (eom ? 0 : startDate.getDate()) : null,
     status: 'idle', last_done_at: null, last_activated_at: null, activated_at: null, skipped: false
   });
+  document.getElementById('rec-add-start').value = ''; document.getElementById('rec-add-eom').checked = false;
   textEl.value = ''; noteEl.value = '';
   document.getElementById('add-recurring-form').classList.add('hidden-field');
   persist(); renderAll();
@@ -1479,7 +1484,12 @@ function openEditRecItem(id) {
       <option value="biweekly" ${r.freq==='biweekly'?'selected':''}>격주</option>
       <option value="monthly" ${r.freq==='monthly'?'selected':''}>매월</option>
     </select>
-    <select id="edit-rec-dow" class="${(r.freq==='weekly'||r.freq==='biweekly')?'':'hidden-field'}">
+    <div id="edit-rec-start-wrap" class="${r.freq==='daily'?'hidden-field':''}">
+      <div class="field-label">시작일 ${recHasStart(r) ? '(바꾸면 이 날짜부터 새로 시작해요)' : '(비워두면 기존 방식: 지정 요일/일에만 활성)'}</div>
+      <input type="date" id="edit-rec-start" value="${recHasStart(r) ? r.start_date : ''}" oninput="onEditRecFreqChange()" />
+      <label id="edit-rec-eom-wrap" class="${(r.freq==='monthly' && recHasStart(r))?'':'hidden-field'}"><input type="checkbox" id="edit-rec-eom" ${r.day_of_month===0?'checked':''} /> 매월 말일에 반복</label>
+    </div>
+    <select id="edit-rec-dow" class="${(!recHasStart(r) && (r.freq==='weekly'||r.freq==='biweekly'))?'':'hidden-field'}">
       <option value="0" ${r.day_of_week===0?'selected':''}>일요일</option>
       <option value="1" ${r.day_of_week===1?'selected':''}>월요일</option>
       <option value="2" ${r.day_of_week===2?'selected':''}>화요일</option>
@@ -1488,7 +1498,7 @@ function openEditRecItem(id) {
       <option value="5" ${r.day_of_week===5?'selected':''}>금요일</option>
       <option value="6" ${r.day_of_week===6?'selected':''}>토요일</option>
     </select>
-    <select id="edit-rec-dom" class="${r.freq==='monthly'?'':'hidden-field'}">
+    <select id="edit-rec-dom" class="${(!recHasStart(r) && r.freq==='monthly')?'':'hidden-field'}">
       <option value="0" ${r.day_of_month===0?'selected':''}>말일</option>
       ${Array.from({length:31},(_,i)=>`<option value="${i+1}" ${r.day_of_month===i+1?'selected':''}>${i+1}일</option>`).join('')}
     </select>
@@ -1500,17 +1510,35 @@ function openEditRecItem(id) {
 }
 function onEditRecFreqChange() {
   const freq = document.getElementById('edit-rec-freq').value;
-  document.getElementById('edit-rec-dow').classList.toggle('hidden-field', freq === 'monthly' || freq === 'daily');
-  document.getElementById('edit-rec-dom').classList.toggle('hidden-field', freq !== 'monthly');
+  const hasStart = freq !== 'daily' && !!document.getElementById('edit-rec-start').value;
+  document.getElementById('edit-rec-start-wrap').classList.toggle('hidden-field', freq === 'daily');
+  document.getElementById('edit-rec-eom-wrap').classList.toggle('hidden-field', !(freq === 'monthly' && hasStart));
+  document.getElementById('edit-rec-dow').classList.toggle('hidden-field', hasStart || !(freq === 'weekly' || freq === 'biweekly'));
+  document.getElementById('edit-rec-dom').classList.toggle('hidden-field', hasStart || freq !== 'monthly');
 }
 function saveEditRecItem() {
   const r = data.recurring.find(x => x.id === modalCtx.id);
   if (!r) return;
   r.text = document.getElementById('edit-rec-text').value.trim() || r.text;
   r.note = document.getElementById('edit-rec-note').value.trim() || null;
+  const before = [r.freq, r.start_date || '', r.day_of_month].join('|');
   r.freq = document.getElementById('edit-rec-freq').value;
-  r.day_of_week = (r.freq === 'weekly' || r.freq === 'biweekly') ? parseInt(document.getElementById('edit-rec-dow').value,10) : null;
-  r.day_of_month = r.freq === 'monthly' ? parseInt(document.getElementById('edit-rec-dom').value,10) : null;
+  const start = r.freq === 'daily' ? '' : document.getElementById('edit-rec-start').value;
+  if (start) {
+    const startDate = recParseYmd(start);
+    const eom = r.freq === 'monthly' && document.getElementById('edit-rec-eom').checked;
+    r.start_date = start;
+    r.day_of_week = (r.freq === 'weekly' || r.freq === 'biweekly') ? startDate.getDay() : null;
+    r.day_of_month = r.freq === 'monthly' ? (eom ? 0 : startDate.getDate()) : null;
+    /* 시작일/주기가 바뀌면 새 일정으로 처음부터 */
+    if ([r.freq, r.start_date, r.day_of_month].join('|') !== before) {
+      r.status = 'idle'; r.last_done_at = null; r.skipped = false; r.activated_at = null; r.last_activated_at = null;
+    }
+  } else {
+    r.start_date = null;
+    r.day_of_week = (r.freq === 'weekly' || r.freq === 'biweekly') ? parseInt(document.getElementById('edit-rec-dow').value,10) : null;
+    r.day_of_month = r.freq === 'monthly' ? parseInt(document.getElementById('edit-rec-dom').value,10) : null;
+  }
   closeModal(); persist(); renderAll();
 }
 
@@ -1520,7 +1548,70 @@ function lastOccurrence(dow) {
 }
 function getLastDayOfMonth(y,m) { return new Date(y, m+1, 0).getDate(); }
 
+
+/* ── 시작일(start_date) 기반 회차 계산 ──
+   start_date(YYYY-MM-DD)가 있는 매주/격주/매월 항목은 시작일에서 7일/14일/매월 같은 '일' 단위로 회차를 센다.
+   가장 최근 회차(O) 이후에 완료·스킵한 적이 없으면 활성 — 그날을 놓쳐도 다음에 열 때 그 회차가 뜬다.
+   start_date가 없는 기존 항목은 shouldActivateRec의 옛 규칙(그날에만 활성)을 그대로 쓴다.
+   ⚠ 같은 로직이 HQ/index.html, 할일위젯 NotificationModel.kt(RecurringSchedule)에 복제돼 있다 — 수정 시 같이 고칠 것. */
+function recHasStart(r) {
+  return (r.freq === 'weekly' || r.freq === 'biweekly' || r.freq === 'monthly') && /^\d{4}-\d{2}-\d{2}$/.test(r.start_date || '');
+}
+function recToday() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+function recParseYmd(s) { const p = s.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); }
+function recMonthOcc(r, start, y, m) {
+  const last = new Date(y, m + 1, 0).getDate();
+  const dom = r.day_of_month === 0 ? last : Math.min(r.day_of_month || start.getDate(), last);
+  return new Date(y, m, dom);
+}
+/* 오늘(로컬 자정) 이하의 가장 최근 회차. 시작일 전이면 null */
+function recLatestOcc(r, today) {
+  const start = recParseYmd(r.start_date);
+  if (today < start) return null;
+  if (r.freq === 'monthly') {
+    let o = recMonthOcc(r, start, today.getFullYear(), today.getMonth());
+    if (o > today) o = recMonthOcc(r, start, today.getFullYear(), today.getMonth() - 1);
+    return o < start ? null : o;
+  }
+  const step = r.freq === 'biweekly' ? 14 : 7;
+  const days = Math.round((today - start) / 86400000);
+  return new Date(start.getFullYear(), start.getMonth(), start.getDate() + Math.floor(days / step) * step);
+}
+/* 오늘보다 뒤의 첫 회차 */
+function recNextOcc(r, today) {
+  const start = recParseYmd(r.start_date);
+  if (r.freq === 'monthly') {
+    const base = today < start ? start : today;
+    for (let k = 0; k < 3; k++) {
+      const o = recMonthOcc(r, start, base.getFullYear(), base.getMonth() + k);
+      if (o > today && o >= start) return o;
+    }
+    return null;
+  }
+  if (today < start) return start;
+  const cur = recLatestOcc(r, today);
+  const step = r.freq === 'biweekly' ? 14 : 7;
+  return new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + step);
+}
+function recShouldActivateByStart(r, today) {
+  const o = recLatestOcc(r, today);
+  if (!o) return false;
+  return !r.last_done_at || new Date(r.last_done_at) < o;
+}
+function recFmtDate(d, today) {
+  const mm = String(d.getMonth() + 1).padStart(2, '0'), dd = String(d.getDate()).padStart(2, '0');
+  return d.getFullYear() === today.getFullYear() ? `${mm}/${dd}` : `${String(d.getFullYear()).slice(2)}.${mm}.${dd}`;
+}
+/* 활성이면 "· 10/08 기준", 아니면 "· 다음 10/22". 시작일 없는 기존 항목은 '' */
+function recBaseLabel(r, today) {
+  if (!recHasStart(r)) return '';
+  if (recShouldActivateByStart(r, today)) return ` · ${recFmtDate(recLatestOcc(r, today), today)} 기준`;
+  const n = recNextOcc(r, today);
+  return n ? ` · 다음 ${recFmtDate(n, today)}` : '';
+}
+
 function shouldActivateRec(r) {
+  if (recHasStart(r)) return recShouldActivateByStart(r, recToday());
   const now = new Date();
   if (r.freq === 'daily') {
     if (!r.last_done_at) return true;
@@ -1549,6 +1640,16 @@ function shouldActivateRec(r) {
 function checkRecActivation() {
   const nowIso = new Date().toISOString();
   data.recurring.forEach(r => {
+    if (recHasStart(r)) {
+      /* 시작일 방식: 저장된 status를 믿지 않고 회차 기준으로 매번 재계산 */
+      if (shouldActivateRec(r)) {
+        if (r.status !== 'active') r.activated_at = nowIso;
+        r.status = 'active';
+      } else if (r.status === 'active') {
+        r.status = r.last_done_at ? 'done' : 'idle';
+      }
+      return;
+    }
     if (shouldActivateRec(r)) {
       if (r.status !== 'active') r.activated_at = nowIso;
       r.status = 'active';
@@ -1558,11 +1659,12 @@ function checkRecActivation() {
 }
 function formatMD(iso) { const d = new Date(iso); return `${d.getMonth()+1}/${d.getDate()}`; }
 function freqLabel(r) {
+  let base = '';
   if (r.freq === 'daily') return '매일';
-  if (r.freq === 'weekly') return `매주 ${DAYS_KO[r.day_of_week]}`;
-  if (r.freq === 'biweekly') return `격주 ${DAYS_KO[r.day_of_week]}`;
-  if (r.freq === 'monthly') return r.day_of_month === 0 ? '매월 말일' : `매월 ${r.day_of_month}일`;
-  return '';
+  if (r.freq === 'weekly') base = `매주 ${DAYS_KO[r.day_of_week]}`;
+  else if (r.freq === 'biweekly') base = `격주 ${DAYS_KO[r.day_of_week]}`;
+  else if (r.freq === 'monthly') base = r.day_of_month === 0 ? '매월 말일' : `매월 ${r.day_of_month}일`;
+  return base + recBaseLabel(r, recToday());
 }
 function completeRecItem(id) {
   const r = data.recurring.find(x => x.id === id); if (!r) return;
